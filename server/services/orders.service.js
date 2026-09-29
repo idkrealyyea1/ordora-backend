@@ -80,7 +80,8 @@ async function createCheckout({ restaurantId, payload }) {
     // concurrent checkouts for this restaurant.
     const restRes = await client.query(
       `SELECT r.id, r.is_active, r.status,
-              s.timezone, s.delivery_fee_cents, s.delivery_enabled, s.ignore_opening_hours
+              s.timezone, s.delivery_fee_cents, s.delivery_enabled, s.ignore_opening_hours,
+              s.currency
        FROM restaurants r
        JOIN restaurant_settings s ON s.restaurant_id = r.id
        WHERE r.id = $1
@@ -169,12 +170,16 @@ async function createCheckout({ restaurantId, payload }) {
     const submissionKey = payload.submissionKey || null;
     if (submissionKey) {
       const existing = await client.query(
-        `SELECT id, code, status, subtotal_cents, delivery_fee_cents, total_cents, created_at
+        `SELECT id, code, status, subtotal_cents, delivery_fee_cents, total_cents, currency, created_at
          FROM orders WHERE restaurant_id = $1 AND submission_key = $2`,
         [restaurantId, submissionKey]
       );
       if (existing.rows[0]) return existing.rows[0];
     }
+
+    // Snapshot the currency valid at checkout so later settings changes
+    // never relabel history. Amounts stay plain integer cents.
+    const orderCurrency = String(rest.currency || 'USD').toUpperCase();
 
     // Insert with collision-resistant public code (retry on rare clash).
     let orderRow = null;
@@ -184,9 +189,9 @@ async function createCheckout({ restaurantId, payload }) {
           `INSERT INTO orders
              (code, restaurant_id, customer_name, customer_whatsapp, customer_phone,
               customer_address, order_type, notes, subtotal_cents, delivery_fee_cents, total_cents,
-              submission_key)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-           RETURNING id, code, status, subtotal_cents, delivery_fee_cents, total_cents, created_at`,
+              submission_key, currency)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+           RETURNING id, code, status, subtotal_cents, delivery_fee_cents, total_cents, currency, created_at`,
           [
             orderCode(),
             restaurantId,
@@ -200,6 +205,7 @@ async function createCheckout({ restaurantId, payload }) {
             deliveryFee,
             total,
             submissionKey,
+            orderCurrency,
           ]
         );
         orderRow = res.rows[0];
@@ -208,7 +214,7 @@ async function createCheckout({ restaurantId, payload }) {
         if (err.code === '23505') {
           // Lost the race with our own retry: return the winner.
           const winner = await client.query(
-            `SELECT id, code, status, subtotal_cents, delivery_fee_cents, total_cents, created_at
+            `SELECT id, code, status, subtotal_cents, delivery_fee_cents, total_cents, currency, created_at
              FROM orders WHERE restaurant_id = $1 AND submission_key = $2`,
             [restaurantId, submissionKey]
           );
@@ -389,7 +395,18 @@ async function analyticsSeries(restaurantId, timezone, days) {
     (acc, s) => ({ orders: acc.orders + s.orders, revenueCents: acc.revenueCents + s.revenueCents }),
     { orders: 0, revenueCents: 0 }
   );
-  return { series, totals };
+  // Distinct snapshot currencies in the window so figures never lose context
+  // when a business changed currency mid-period. No conversion is applied.
+  const currencies = (
+    await query(
+      `SELECT DISTINCT UPPER(COALESCE(currency, 'USD')) AS currency
+       FROM orders
+       WHERE restaurant_id = $1 AND ${REVENUE_SQL}
+         AND created_at >= now() - ($2::int * INTERVAL '1 day')`,
+      [restaurantId, days]
+    )
+  ).rows.map((r) => r.currency);
+  return { series, totals, currencies };
 }
 
 async function topItems(restaurantId, days = 30, limit = 10) {
@@ -461,6 +478,7 @@ async function exportRows(restaurantId, { revenueOnly, status, limit = 5000 } = 
     `SELECT o.code, o.status, o.order_type, o.customer_name, o.customer_whatsapp,
             o.customer_phone, o.customer_address, o.notes,
             o.subtotal_cents, o.delivery_fee_cents, o.total_cents,
+            UPPER(COALESCE(o.currency, 'USD')) AS currency,
             o.created_at, o.updated_at
      FROM orders o
      WHERE ${where} AND o.archived_at IS NULL
@@ -478,7 +496,7 @@ async function exportRows(restaurantId, { revenueOnly, status, limit = 5000 } = 
     await query(
       `SELECT o.id, o.code, o.status, o.order_type, o.total_cents, o.subtotal_cents, o.delivery_fee_cents,
               o.created_at, o.updated_at, r.name AS restaurant_name, r.slug AS restaurant_slug,
-              s.currency
+              COALESCE(o.currency, s.currency, 'USD') AS currency
        FROM orders o
        JOIN restaurants r ON r.id = o.restaurant_id
        JOIN restaurant_settings s ON s.restaurant_id = r.id

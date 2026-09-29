@@ -47,6 +47,7 @@ async function myRestaurant(req, res) {
       id: restaurant.id,
       slug: restaurant.slug,
       name: restaurant.name,
+      businessType: restaurant.business_type || 'restaurant',
       status: restaurant.status,
       maxMenuItems: restaurant.max_menu_items,
       itemCount: await restaurants.countItems(id),
@@ -296,12 +297,12 @@ async function ordersReportCsv(req, res) {
   const rows = await orders.exportRows(id, { revenueOnly, status: req.query.status || null });
   const header = [
     'Code', 'Status', 'Type', 'Customer', 'WhatsApp', 'Phone', 'Address', 'Notes',
-    'Subtotal (cents)', 'Delivery fee (cents)', 'Total (cents)', 'Created', 'Updated',
+    'Subtotal (cents)', 'Delivery fee (cents)', 'Total (cents)', 'Currency', 'Created', 'Updated',
   ];
   const body = rows.map((r) => [
     r.code, r.status, r.order_type, r.customer_name, r.customer_whatsapp, r.customer_phone,
     r.customer_address, r.notes, r.subtotal_cents, r.delivery_fee_cents, r.total_cents,
-    r.created_at, r.updated_at,
+    r.currency || 'USD', r.created_at, r.updated_at,
   ]);
   sendCsv(res, `orders-${id.slice(0, 8)}.csv`, [header, ...body]);
 }

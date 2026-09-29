@@ -34,11 +34,34 @@ function validateLogin(body = {}) {
 
 const NAME_OPTS = { field: 'name', min: 2, max: 80 };
 
+/* Closed food-business type set (021_business_type.sql). New types need a later spec + migration. */
+const BUSINESS_TYPES = [
+  'restaurant', 'cafe', 'dessert_shop', 'bakery', 'cake_business',
+  'home_kitchen', 'home_food_business', 'cloud_kitchen', 'small_food_business',
+];
+
+function validateBusinessType(value) {
+  const t = String(value === undefined || value === null || value === '' ? 'restaurant' : value).trim().toLowerCase();
+  if (!BUSINESS_TYPES.includes(t)) {
+    throw badRequest('businessType must be one of: ' + BUSINESS_TYPES.join(', '), [{ field: 'businessType' }]);
+  }
+  return t;
+}
+
+function validateCurrencyOptional(value, field = 'currency') {
+  if (value === undefined || value === null || value === '') return undefined;
+  const cur = String(value).trim().toLowerCase();
+  if (!/^[a-z]{3}$/.test(cur)) throw badRequest('currency must be a 3-letter ISO code', [{ field }]);
+  return cur;
+}
+
 function validateRestaurantCreate(body = {}) {
   return {
     name: requireText(body.name, NAME_OPTS),
     slug: body.slug === undefined || body.slug === '' ? undefined : normalizeSlug(String(body.slug)),
     maxMenuItems: toIntInRange(body.maxMenuItems, 'maxMenuItems', { min: 1, max: 10000, fallback: 30 }),
+    businessType: validateBusinessType(body.businessType),
+    currency: validateCurrencyOptional(body.currency),
   };
 }
 
@@ -67,6 +90,11 @@ function validateRestaurantUpdate(body = {}) {
   if (body.name !== undefined) patch.name = requireText(body.name, NAME_OPTS);
   if (body.slug !== undefined) patch.slug = normalizeSlug(String(body.slug));
   if (body.maxMenuItems !== undefined) patch.maxMenuItems = toIntInRange(body.maxMenuItems, 'maxMenuItems', { min: 1, max: 10000 });
+  if (body.businessType !== undefined) patch.businessType = validateBusinessType(body.businessType);
+  if (body.currency !== undefined) {
+    const cur = validateCurrencyOptional(body.currency);
+    if (cur !== undefined) patch.currency = cur;
+  }
   if (body.isActive !== undefined) patch.isActive = toBool(body.isActive, 'isActive');
   if (body.primaryColor !== undefined) patch.primaryColor = normalizeHexColor(body.primaryColor, 'primaryColor');
   if (body.secondaryColor !== undefined) patch.secondaryColor = normalizeHexColor(body.secondaryColor, 'secondaryColor');

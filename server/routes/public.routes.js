@@ -62,6 +62,7 @@ router.post(
       order: {
         code: order.code,
         status: order.status,
+        currency: order.currency || 'USD',
         totalCents: order.total_cents,
         subtotalCents: order.subtotal_cents,
         deliveryFeeCents: order.delivery_fee_cents,

@@ -17,21 +17,21 @@ async function slugExists(slug) {
 }
 
 /** Create tenant + default settings + 7 default hour rows in one transaction. */
-async function createRestaurant({ name, slug, maxMenuItems, subscriptionEndsAt }) {
+async function createRestaurant({ name, slug, maxMenuItems, subscriptionEndsAt, businessType, currency }) {
   return withTx(async (client) => {
     // Serialize on slug uniqueness explicitly for a clean error message.
     const dupe = await client.query('SELECT 1 FROM restaurants WHERE slug = $1', [slug]);
     if (dupe.rowCount > 0) throw conflict('SLUG_TAKEN', 'A restaurant with this URL slug already exists');
 
     const { rows } = await client.query(
-      `INSERT INTO restaurants (name, slug, max_menu_items, subscription_ends_at)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [name, slug, maxMenuItems, subscriptionEndsAt || null]
+      `INSERT INTO restaurants (name, slug, max_menu_items, subscription_ends_at, business_type)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [name, slug, maxMenuItems, subscriptionEndsAt || null, businessType || 'restaurant']
     );
     const restaurant = rows[0];
     await client.query(
-      'INSERT INTO restaurant_settings (restaurant_id) VALUES ($1)',
-      [restaurant.id]
+      'INSERT INTO restaurant_settings (restaurant_id, currency) VALUES ($1, $2)',
+      [restaurant.id, currency || 'USD']
     );
     for (let day = 0; day < 7; day++) {
       await client.query(
@@ -65,6 +65,10 @@ async function updateRestaurant(id, patch) {
   if (patch.status !== undefined) {
     params.push(patch.status);
     sets.push(`status = $${params.length}`);
+  }
+  if (patch.businessType !== undefined) {
+    params.push(patch.businessType);
+    sets.push(`business_type = $${params.length}`);
   }
   if (sets.length === 0) return getById(id);
 
@@ -159,6 +163,7 @@ async function getPublicView(slug) {
   return {
     name: restaurant.name,
     slug: restaurant.slug,
+    businessType: restaurant.business_type || 'restaurant',
     status: restaurant.is_active ? restaurant.status : 'closed',
     openNow,
     deliveryGroups,
@@ -211,7 +216,7 @@ async function listForOwner({ search, status, limit, offset }) {
   params.push(limit, offset);
   const { rows } = await query(
     `SELECT r.id, r.slug, r.name, r.status, r.is_active, r.max_menu_items, r.created_at,
-            COALESCE(items.n, 0)::int AS item_count
+            r.business_type, COALESCE(items.n, 0)::int AS item_count
      FROM restaurants r
      LEFT JOIN (SELECT restaurant_id, COUNT(*) AS n FROM menu_items GROUP BY restaurant_id) items
        ON items.restaurant_id = r.id
@@ -246,7 +251,8 @@ async function ownerStats(restaurantId) {
   };
 }
 
-/** Platform-wide overview numbers. */
+/** Platform-wide overview numbers. Single-currency totals are kept for
+ *  backwards compatibility; revenueByCurrency adds context without conversion. */
 async function platformOverview() {  const res = await query(
     `SELECT
        (SELECT COUNT(*)::int FROM restaurants) AS restaurants_total,
@@ -255,12 +261,22 @@ async function platformOverview() {  const res = await query(
        (SELECT COALESCE(SUM(total_cents), 0)::bigint FROM orders
           WHERE created_at >= date_trunc('day', now()) AND ${REVENUE_SQL}) AS revenue_today_cents`
   );
+  const byCurrency = await query(
+    `SELECT UPPER(COALESCE(o.currency, s.currency, 'USD')) AS currency,
+            COALESCE(SUM(o.total_cents), 0)::bigint AS cents
+     FROM orders o
+     JOIN restaurants r ON r.id = o.restaurant_id
+     LEFT JOIN restaurant_settings s ON s.restaurant_id = r.id
+     WHERE o.created_at >= date_trunc('day', now()) AND ${REVENUE_SQL_O}
+     GROUP BY 1 ORDER BY 1`
+  );
   const row = res.rows[0];
   return {
     restaurantsTotal: row.restaurants_total,
     restaurantsActive: row.restaurants_active,
     ordersToday: row.orders_today,
     revenueTodayCents: Number(row.revenue_today_cents),
+    revenueByCurrency: byCurrency.rows.map((b) => ({ currency: b.currency, cents: Number(b.cents) })),
   };
 }
 
@@ -268,11 +284,13 @@ async function platformOverview() {  const res = await query(
 async function reportSummaryForOwner() {
   const { rows } = await query(
     `SELECT r.name, r.slug, r.is_active AS "isActive", r.created_at AS "createdAt",
+            UPPER(COALESCE(s.currency, 'USD')) AS "currency",
             COALESCE(items.n, 0)::int AS "itemCount",
             COALESCE(o7.orders, 0)::int AS "orders30d",
             COALESCE(o7.revenue, 0)::bigint AS "revenue30dCents",
             COALESCE(o30.orders, 0)::int AS "ordersAllTime"
      FROM restaurants r
+     LEFT JOIN restaurant_settings s ON s.restaurant_id = r.id
      LEFT JOIN (SELECT restaurant_id, COUNT(*) AS n FROM menu_items GROUP BY restaurant_id) items
        ON items.restaurant_id = r.id
      LEFT JOIN (
@@ -294,7 +312,7 @@ async function reportSummaryForOwner() {
 async function listPublicDirectory() {
   const rows = (
     await query(
-      `SELECT r.id, r.slug, r.name, r.status,
+      `SELECT r.id, r.slug, r.name, r.status, r.business_type,
               s.description, s.logo_path, s.cover_path, s.currency,
               s.timezone, s.ignore_opening_hours, s.name_en,
               (SELECT COUNT(*)::int FROM menu_items m
@@ -328,6 +346,7 @@ async function listPublicDirectory() {
       slug: r.slug,
       name: r.name,
       nameEn: r.name_en || '',
+      businessType: r.business_type || 'restaurant',
       description: r.description || '',
       logoPath: r.logo_path,
       coverPath: r.cover_path,

@@ -516,3 +516,18 @@ div.sf-item-img { display: grid; place-items: center; font-size: 2rem; font-weig
   .sf-cart-go { padding: 0; }
   .sf-success-code { font-size: 1.6rem; }
 }
+
+/* ---------------- KEYBOARD FOCUS (Task 4) ---------------- */
+.live-content button:focus-visible,
+.live-content input:focus-visible,
+.live-content select:focus-visible,
+.live-content textarea:focus-visible,
+.live-content a:focus-visible,
+.live-head button:focus-visible,
+.live-cart:focus-visible,
+.cart-modal button:focus-visible,
+.cart-modal input:focus-visible,
+.cart-modal textarea:focus-visible {
+  outline: 3px solid var(--saffron);
+  outline-offset: 2px;
+}

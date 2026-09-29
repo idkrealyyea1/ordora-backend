@@ -25,9 +25,9 @@ async function overview(req, res) {
 /** GET /api/owner/reports/restaurants.csv — per-restaurant summary for owners. */
 async function restaurantsReportCsv(req, res) {
   const rows = await restaurants.reportSummaryForOwner();
-  const header = ['Name', 'Slug', 'Active', 'Menu items', 'Orders (30d)', 'Revenue (30d cents)', 'Orders (all time)', 'Created'];
+  const header = ['Name', 'Slug', 'Active', 'Currency', 'Menu items', 'Orders (30d)', 'Revenue (30d cents)', 'Orders (all time)', 'Created'];
   const body = rows.map((r) => [
-    r.name, r.slug, r.isActive ? 'yes' : 'no', r.itemCount,
+    r.name, r.slug, r.isActive ? 'yes' : 'no', r.currency || 'USD', r.itemCount,
     r.orders30d, r.revenue30dCents, r.ordersAllTime, r.createdAt,
   ]);
   sendCsv(res, 'restaurants-summary.csv', [header, ...body]);
@@ -53,6 +53,7 @@ async function listRestaurants(req, res) {
       id: r.id,
       slug: r.slug,
       name: r.name,
+      businessType: r.business_type || 'restaurant',
       status: r.status,
       isActive: r.is_active,
       maxMenuItems: r.max_menu_items,
@@ -95,6 +96,7 @@ async function createRestaurant(req, res) {
       id: restaurant.id,
       slug: restaurant.slug,
       name: restaurant.name,
+      businessType: restaurant.business_type || 'restaurant',
       status: restaurant.status,
       isActive: restaurant.is_active,
       maxMenuItems: restaurant.max_menu_items,
@@ -123,6 +125,7 @@ async function getRestaurant(req, res) {
       id: restaurant.id,
       slug: restaurant.slug,
       name: restaurant.name,
+      businessType: restaurant.business_type || 'restaurant',
       status: restaurant.status,
       isActive: restaurant.is_active,
       maxMenuItems: restaurant.max_menu_items,
@@ -134,17 +137,19 @@ async function getRestaurant(req, res) {
   });
 }
 
-/** Owner update: identity/limits/activation here; colors proxied to settings. */
+/** Owner update: identity/limits/activation here; colors/currency proxied to settings. */
 async function updateRestaurant(req, res) {
   const id = assertUuid(req.params.id, 'id');
   await restaurants.assertExists(id);
   const patch = v.validateRestaurantUpdate(req.body);
 
-  const colorKeys = ['primaryColor', 'secondaryColor'];
+  // Currency mutates only via business-admin settings or the creation
+  // default; the platform-owner update path intentionally ignores it.
+  const settingsKeys = ['primaryColor', 'secondaryColor'];
   const restPatch = {};
   const settingsPatch = {};
   for (const [k, val] of Object.entries(patch)) {
-    if (colorKeys.includes(k)) settingsPatch[k] = val;
+    if (settingsKeys.includes(k)) settingsPatch[k] = val;
     else restPatch[k] = val;
   }
 
@@ -162,6 +167,7 @@ async function updateRestaurant(req, res) {
       id: updated.id,
       slug: updated.slug,
       name: updated.name,
+      businessType: updated.business_type || 'restaurant',
       status: updated.status,
       isActive: updated.is_active,
       maxMenuItems: updated.max_menu_items,

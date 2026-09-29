@@ -357,7 +357,11 @@
           '</tr></thead><tbody>' +
           data.restaurants.map((r) =>
             '<tr>' +
-              '<td><strong>' + esc(r.name) + '</strong></td>' +
+              '<td><strong>' + esc(r.name) + '</strong>' +
+                ((r.businessType && r.businessType !== 'restaurant')
+                  ? '<div class="small muted">' + esc(r.businessType) + '</div>'
+                  : '') +
+              '</td>' +
               '<td class="small muted">/' + esc(r.slug) + '</td>' +
               '<td>' + r.itemCount + ' / ' + r.maxMenuItems + '</td>' +
               '<td>' +
@@ -447,6 +451,12 @@
         '<div class="field"><label for="cr-slug">' + I.t('mSlug') + '</label><input id="cr-slug" maxlength="63" placeholder="' + I.t('mSlugHint') + '">' +
           '<div class="hint">' + I.t('mPublicPage') + '</div></div>' +
         '<div class="field"><label for="cr-max">' + I.t('mMaxItems') + '</label><input id="cr-max" type="number" min="1" max="10000" value="30" required></div>' +
+        '<div class="field"><label for="cr-type">' + I.t('mBizType') + '</label><select id="cr-type">' +
+          ['restaurant', 'cafe', 'dessert_shop', 'bakery', 'cake_business', 'home_kitchen', 'home_food_business', 'cloud_kitchen', 'small_food_business'].map((v) => '<option value="' + v + '">' + v + '</option>').join('') +
+        '</select></div>' +
+        '<div class="field"><label for="cr-cur">' + I.t('currencyL') + '</label><select id="cr-cur">' +
+          ['ILS', 'USD', 'EUR', 'GBP', 'JOD', 'SAR', 'AED', 'EGP'].map((c) => '<option value="' + c.toLowerCase() + '"' + (c === 'USD' ? ' selected' : '') + '>' + c + '</option>').join('') +
+        '</select></div>' +
         '<h3 class="section-title">' + I.t('mFirstAdmin') + '</h3>' +
         '<div class="field"><label for="cr-user">' + I.t('mAdminUser') + '</label><input id="cr-user" maxlength="40"></div>' +
         '<div class="field"><label for="cr-email">' + I.t('mAdminEmail') + '</label><input id="cr-email" type="email" maxlength="120"></div>' +
@@ -462,6 +472,8 @@
         name: document.getElementById('cr-name').value,
         slug: document.getElementById('cr-slug').value || undefined,
         maxMenuItems: Number(document.getElementById('cr-max').value),
+        businessType: document.getElementById('cr-type').value,
+        currency: document.getElementById('cr-cur').value.trim() || undefined,
       };
       const username = document.getElementById('cr-user').value.trim();
       if (username) {
@@ -498,6 +510,9 @@
         '<div class="field"><label for="ed-name">' + I.t('mName') + '</label><input id="ed-name" maxlength="80" value="' + esc(r.name) + '" required></div>' +
         '<div class="field"><label for="ed-slug">' + I.t('mSlug2') + '</label><input id="ed-slug" maxlength="63" value="' + esc(r.slug) + '" required></div>' +
         '<div class="field"><label for="ed-max">' + I.t('mMaxItems') + '</label><input id="ed-max" type="number" min="1" max="10000" value="' + r.maxMenuItems + '" required></div>' +
+        '<div class="field"><label for="ed-type">' + I.t('mBizType') + '</label><select id="ed-type">' +
+          ['restaurant', 'cafe', 'dessert_shop', 'bakery', 'cake_business', 'home_kitchen', 'home_food_business', 'cloud_kitchen', 'small_food_business'].map((v) => '<option value="' + v + '"' + ((r.businessType || 'restaurant') === v ? ' selected' : '') + '>' + v + '</option>').join('') +
+        '</select></div>' +
         '<button type="submit" class="btn btn-block">' + I.t('mSave') + '</button>' +
       '</form>'
     );
@@ -508,6 +523,7 @@
         name: document.getElementById('ed-name').value,
         slug: document.getElementById('ed-slug').value,
         maxMenuItems: Number(document.getElementById('ed-max').value),
+        businessType: document.getElementById('ed-type').value,
       }));
     });
   }

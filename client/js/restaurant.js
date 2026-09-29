@@ -182,6 +182,9 @@
     const s = view.settings || {};
     const cover = s.coverPath || FOOD;
     const addr = s.address ? '<span>' + esc(s.address) + '</span>' : '';
+    const phone = s.phone ? '<span><a href="tel:' + esc(s.phone.replace(/[^+\d]/g, '')) + '">' + esc(s.phone) + '</a></span>' : '';
+    const waDigits = (s.whatsapp || '').replace(/\D/g, '');
+    const wa = waDigits ? '<span><a href="https://wa.me/' + esc(waDigits) + '" target="_blank" rel="noopener">WhatsApp</a></span>' : '';
     const del = hasDelivery() ? '<span>' + esc(t().deliveryBy + ': ' + view.deliveryGroups.join('، ')) + '</span>' : '';
     const cats = [{ id: 'all', name: t().all }, { id: 'popular', name: t().popular }]
       .concat(view.categories.map((c) => ({ id: c.id, name: c.name })));
@@ -195,12 +198,12 @@
           '<button class="outline-btn" style="color:var(--paper);border-color:rgba(255,255,255,.25)" id="book-btn">' + esc(t().book) + '</button></span>' +
         '</div><div><h1>' + esc((lang === 'en' && s.nameEn) ? s.nameEn : view.name) + '</h1>' +
         (s.description ? '<p>' + esc(s.description) + '</p>' : '') +
-        '<div class="live-meta">' + addr + del + '</div></div></div></section>' +
+        '<div class="live-meta">' + addr + phone + wa + del + '</div></div></div></section>' +
       (!view.openNow ? '<div class="live-alert warn">' + esc(t().closedNotice) + '</div>' : '') +
       '<section class="live-section-head"><div><small>' + esc(t().menuEye) + '</small><h2>' + esc(t().menuTitle) + '</h2></div></section>' +
-      '<label class="search"><input id="menu-search" maxlength="60" value="' + esc(searchTerm) + '" placeholder="' + esc(t().search) + '"></label>' +
-      '<nav class="category-nav">' + cats.map((c) =>
-        '<button class="' + (c.id === activeCategory ? 'active' : '') + '" data-cat="' + esc(c.id) + '">' + esc(c.name) + '</button>'
+      '<label class="search"><input id="menu-search" maxlength="60" aria-label="' + esc(t().search) + '" value="' + esc(searchTerm) + '" placeholder="' + esc(t().search) + '"></label>' +
+      '<nav class="category-nav" aria-label="' + esc(t().all) + '">' + cats.map((c) =>
+        '<button class="' + (c.id === activeCategory ? 'active' : '') + '" aria-pressed="' + (c.id === activeCategory) + '" data-cat="' + esc(c.id) + '">' + esc(c.name) + '</button>'
       ).join('') + '</nav>' +
       '<div id="dish-zone"></div>';
 
@@ -208,7 +211,11 @@
     document.getElementById('book-btn').addEventListener('click', () => { bookingOpen = true; cartOpen = false; renderOverlay(); });
     document.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => {
       activeCategory = b.dataset.cat;
-      document.querySelectorAll('[data-cat]').forEach((x) => x.classList.toggle('active', x === b));
+      document.querySelectorAll('[data-cat]').forEach((x) => {
+        const on = x === b;
+        x.classList.toggle('active', on);
+        x.setAttribute('aria-pressed', String(on));
+      });
       updateGrids();
     }));
     document.getElementById('menu-search').addEventListener('input', (e) => {
@@ -282,15 +289,17 @@
 
   function renderOverlay() {
     const root = $overlay();
-    if (bookingOpen) { root.innerHTML = bookingHtml(); wireBooking(); return; }
+    if (bookingOpen) { root.innerHTML = bookingHtml(); wireBooking(); focusModal(root); return; }
     if (!cartOpen) { root.innerHTML = ''; return; }
     const entries = cartEntries();
     if (!entries.length) {
       root.innerHTML = '<div class="cart-overlay"><section class="cart-modal"><div class="cart-title"><div><h2>' +
         esc(t().cartEmpty) + '</h2></div><button class="cart-close" data-close>×</button></div>' +
         '<p style="color:rgba(32,61,58,.6);font-size:13px">' + esc(t().cartEmptyHint) + '</p>' +
+        '<div class="cart-total" aria-live="polite" aria-atomic="true" style="display:flex;justify-content:space-between"><span>' + esc(t().total) + '</span><span>' + esc(money(0)) + '</span></div>' +
         '<button class="co-ghost" data-close>' + esc(t().keepBrowsing) + '</button></section></div>';
       root.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeOverlay));
+      focusModal(root);
       return;
     }
     const sub = subtotalCents(), fee = feeCents();
@@ -304,7 +313,7 @@
         ? '<div class="co-type"><button data-type="pickup"' + (orderType === 'pickup' ? ' class="active"' : '') + '>' + esc(t().pickup) + '</button>' +
           '<button data-type="delivery"' + (orderType === 'delivery' ? ' class="active"' : '') + '>' + esc(t().delivery) + '</button></div>'
         : '') +
-      '<div class="cart-total" style="display:grid;gap:6px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>' + esc(t().subtotal) + '</span><span>' + esc(money(sub)) + '</span></div>' +
+      '<div class="cart-total" aria-live="polite" aria-atomic="true" style="display:grid;gap:6px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>' + esc(t().subtotal) + '</span><span>' + esc(money(sub)) + '</span></div>' +
       (orderType === 'delivery' ? '<div style="display:flex;justify-content:space-between;font-size:13px"><span>' + esc(t().deliveryFee) + '</span><span>' + esc(money(fee)) + '</span></div>' : '') +
       '<div style="display:flex;justify-content:space-between"><span>' + esc(t().total) + '</span><span>' + esc(money(sub + fee)) + '</span></div></div>' +
       '<form id="checkout-form" class="co-form" novalidate>' +
@@ -332,9 +341,25 @@
     }));
     document.getElementById('place-order-btn').addEventListener('click', submitOrder);
     document.getElementById('order-wa-btn').addEventListener('click', orderViaWhatsapp);
+    focusModal(root);
   }
 
-  function closeOverlay() { cartOpen = false; bookingOpen = false; renderOverlay(); }
+  function closeOverlay() {
+    cartOpen = false;
+    bookingOpen = false;
+    renderOverlay();
+    const bar = $bar();
+    if (bar && !bar.classList.contains('hidden')) {
+      try { bar.focus({ preventScroll: true }); } catch (_) { /* older browsers */ }
+    }
+  }
+
+  function focusModal(root) {
+    const modal = root.querySelector('.cart-modal');
+    if (!modal) return;
+    modal.setAttribute('tabindex', '-1');
+    try { modal.focus({ preventScroll: true }); } catch (_) { /* older browsers */ }
+  }
 
   function changeCart(id, delta) {
     stashCo();

@@ -84,7 +84,9 @@
   async function reloadInfo() {
     info = await api.get('/api/admin/restaurant');
     currency = info.settings.currency;
-    document.getElementById('restaurant-name').textContent = info.restaurant.name;
+    const bizType = (info.restaurant && info.restaurant.businessType) || 'restaurant';
+    document.getElementById('restaurant-name').textContent =
+      info.restaurant.name + (bizType === 'restaurant' ? '' : ' · ' + bizType);
     document.title = info.restaurant.name + ' — Dashboard';
 
     const logo = document.getElementById('brand-logo');
@@ -863,7 +865,9 @@
             '<div class="field"><label for="st-tz">' + esc(I.t('timezoneL')) + '</label><select id="st-tz">' +
               TIMEZONES.map((tz) => '<option' + (tz === s.timezone ? ' selected' : '') + '>' + tz + '</option>').join('') +
             '</select></div>' +
-            '<div class="field"><label for="st-cur">' + esc(I.t('currencyL')) + '</label><input id="st-cur" maxlength="3" value="' + esc(s.currency) + '"></div>' +
+            '<div class="field"><label for="st-cur">' + esc(I.t('currencyL')) + '</label><select id="st-cur">' +
+              ['ILS', 'USD', 'EUR', 'GBP', 'JOD', 'SAR', 'AED', 'EGP'].map((c) => '<option value="' + c.toLowerCase() + '"' + (String(s.currency || 'USD').toUpperCase() === c ? ' selected' : '') + '>' + c + '</option>').join('') +
+            '</select></div>' +
           '</div>' +
           '<div class="form-row form-row-2">' +
             '<div class="field"><label for="st-fee">' + esc(I.t('deliveryFeeL')) + '</label><input id="st-fee" type="number" min="0" step="0.01" value="' + (s.deliveryFeeCents / 100).toFixed(2) + '"></div>' +
