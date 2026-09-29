@@ -16,7 +16,6 @@ const bookings = require('../services/bookings.service');
 const settingsService = require('../services/settings.service');
 const sse = require('../middleware/sse');
 const delivery = require('../services/delivery.service');
-const notifications = require('../services/notifications.service');
 const { handleImageUpload, persistSavedImage, deleteUpload } = require('../middleware/upload');
 const { sendCsv } = require('../utils/csv');
 const { forbidden, notFound, badRequest } = require('../utils/errors');
@@ -321,42 +320,6 @@ function events(req, res) {
   sse.addClient(id, res);
 }
 
-/* ------------------------- notifications ------------------------- */
-
-async function listNotifications(req, res) {
-  const page = v.validatePagination(req.query);
-  // Rows are per-recipient (D1); the tenant predicate below is defense in depth.
-  const box = await notifications.listForUser(req.user.id, { limit: page.limit, offset: page.offset });
-  const id = tenantId(req);
-  const scoped = box.notifications.filter((n) => n.restaurant_id === id);
-  res.json({
-    notifications: scoped.map(toPublicNotification),
-    unreadCount: scoped.filter((n) => !n.is_read).length,
-    total: scoped.length,
-    page: page.page,
-    limit: page.limit,
-  });
-}
-
-function toPublicNotification(n) {
-  return {
-    id: n.id,
-    orderId: n.order_id,
-    orderCode: n.order_code,
-    type: n.type,
-    title: n.title,
-    body: n.body,
-    isRead: n.is_read,
-    createdAt: n.created_at,
-  };
-}
-
-async function readNotification(req, res) {
-  const id = tenantId(req);
-  const row = await notifications.markRead(req.user.id, v.assertUuid(req.params.id, 'id'), id);
-  res.json({ id: row.id, isRead: true });
-}
-
 /* --------------------- delivery companies -------------------------- */
 
 async function listMyDeliveryGroups(req, res) {
@@ -401,6 +364,4 @@ module.exports = {
   analytics: asyncHandler(analytics),
   ordersReportCsv: asyncHandler(ordersReportCsv),
   events,
-  listNotifications: asyncHandler(listNotifications),
-  readNotification: asyncHandler(readNotification),
 };

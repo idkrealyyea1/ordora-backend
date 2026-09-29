@@ -919,18 +919,3 @@ input[type="color"] { width: 52px; height: 38px; padding: 2px; border: 1px solid
   }
   .rest-card, .rest-cover-img { transform: none !important; }
 }
-/* Notifications bell + dropdown (005) */
-.notif-wrap { position: relative; }
-.notif-panel {
-  position: absolute; top: calc(100% + 8px); inset-inline-end: 0; z-index: 60;
-  width: min(340px, 86vw); max-height: 320px; overflow: auto;
-  background: #fff; border: 1px solid #e5e0d5; border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.12); padding: 6px;
-}
-.notif-item {
-  display: block; width: 100%; text-align: start; padding: 8px 10px;
-  border: 0; border-radius: 8px; background: transparent; cursor: pointer;
-}
-.notif-item:hover { background: #f6f3ec; }
-.notif-item.notif-unread { background: #fdf6e3; font-weight: 700; }
-.notif-item small { display: block; font-weight: 400; opacity: .75; }

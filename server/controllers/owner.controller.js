@@ -423,52 +423,6 @@ async function deleteRestaurantRequest(req, res) {
   res.json({ ok: true });
 }
 
-/* ------------------------- notifications ------------------------- */
-
-async function listNotifications(req, res) {
-  const page = v.validatePagination(req.query);
-  const box = await require('../services/notifications.service').listForUser(req.user.id, {
-    limit: page.limit,
-    offset: page.offset,
-  });
-  res.json({
-    notifications: box.notifications.map((n) => ({
-      id: n.id,
-      orderId: n.order_id,
-      orderCode: n.order_code,
-      restaurantId: n.restaurant_id,
-      restaurantName: n.restaurant_name,
-      restaurantSlug: n.restaurant_slug,
-      type: n.type,
-      title: n.title,
-      body: n.body,
-      isRead: n.is_read,
-      createdAt: n.created_at,
-    })),
-    unreadCount: box.unreadCount,
-    total: box.total,
-    page: page.page,
-    limit: page.limit,
-  });
-}
-
-async function readNotification(req, res) {
-  const svc = require('../services/notifications.service');
-  const row = await svc.markRead(req.user.id, assertUuid(req.params.id, 'id'), null);
-  res.json({ id: row.id, isRead: true });
-}
-
-function ownerEvents(req, res) {
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache, no-transform',
-    Connection: 'keep-alive',
-    'X-Accel-Buffering': 'no',
-  });
-  res.write('retry: 5000\n\n');
-  require('../middleware/sse').addClient('__platform__', res);
-}
-
 module.exports = {
   overview: asyncHandler(overview),
   restaurantsReportCsv: asyncHandler(restaurantsReportCsv),
@@ -500,7 +454,4 @@ module.exports = {
   listRestaurantRequests: asyncHandler(listRestaurantRequests),
   updateRestaurantRequestStatus: asyncHandler(updateRestaurantRequestStatus),
   deleteRestaurantRequest: asyncHandler(deleteRestaurantRequest),
-  listNotifications: asyncHandler(listNotifications),
-  readNotification: asyncHandler(readNotification),
-  ownerEvents,
 };

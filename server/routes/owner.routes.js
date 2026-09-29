@@ -46,9 +46,4 @@ router.get('/restaurant-requests', requireOwner, owner.listRestaurantRequests);
 router.patch('/restaurant-requests/:id', requireOwner, owner.updateRestaurantRequestStatus);
 router.delete('/restaurant-requests/:id', requireOwner, owner.deleteRestaurantRequest);
 
-// Persistent order notifications — platform feed (005, D1).
-router.get('/notifications', requireOwner, owner.listNotifications);
-router.patch('/notifications/:id/read', requireOwner, owner.readNotification);
-router.get('/events', requireOwner, owner.ownerEvents);
-
 module.exports = router;

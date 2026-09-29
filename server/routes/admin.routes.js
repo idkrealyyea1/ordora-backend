@@ -20,10 +20,6 @@ router.get('/qr', admin.qrCode);
 // Live new-order notifications (Server-Sent Events)
 router.get('/events', admin.events);
 
-// Persistent notifications (005, D1: database is the source of truth)
-router.get('/notifications', admin.listNotifications);
-router.patch('/notifications/:id/read', admin.readNotification);
-
 // Categories
 router.get('/categories', admin.listCategories);
 router.post('/categories', admin.createCategory);

@@ -14,69 +14,6 @@
   let statusFilter = '';
   let currentRole = null;
 
-  /* ------------------------- notifications (005) ----------------------- */
-
-  async function loadNotifications() {
-    try {
-      const box = await api.get('/api/owner/notifications?limit=20');
-      renderBell(box);
-    } catch (_) {
-      /* bell stays empty when offline or unauthorized */
-    }
-  }
-
-  function renderBell(box) {
-    const count = document.getElementById('notif-count');
-    const has = box && box.unreadCount > 0;
-    if (!count) return;
-    count.textContent = has ? box.unreadCount : '';
-    count.classList.toggle('hidden', !has);
-    const panel = document.getElementById('notif-panel');
-    if (!panel) return;
-    const rows = (box && box.notifications) || [];
-    panel.innerHTML = rows.length
-      ? rows.map((n) =>
-          '<button class="notif-item' + (n.isRead ? '' : ' notif-unread') + '" data-id="' + esc(n.id) + '">' +
-          '<strong>' + esc(n.title) + '</strong>' +
-          '<small>' + esc(n.restaurantName || '') + ' · ' + esc(n.orderCode || '') + '</small></button>'
-        ).join('')
-      : '<div class="muted" style="padding:8px 10px">' + esc(I.t('notifEmpty')) + '</div>';
-    panel.querySelectorAll('.notif-item').forEach((b) => {
-      b.addEventListener('click', async () => {
-        try {
-          await api.patch('/api/owner/notifications/' + encodeURIComponent(b.dataset.id) + '/read');
-        } catch (_) {
-          /* already read or gone */
-        }
-        panel.classList.add('hidden');
-        loadNotifications();
-      });
-    });
-  }
-
-  function bindNotifBell() {
-    const bell = document.getElementById('notif-bell');
-    const panel = document.getElementById('notif-panel');
-    if (!bell || !panel) return;
-    bell.setAttribute('aria-label', I.t('notifBell'));
-    bell.addEventListener('click', () => panel.classList.toggle('hidden'));
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('.notif-wrap')) panel.classList.add('hidden');
-    });
-  }
-
-  function connectOwnerEvents() {
-    try {
-      const es = new EventSource('/api/owner/events');
-      es.addEventListener('notification:new', () => loadNotifications());
-      es.onerror = () => {
-        // EventSource retries automatically; list reconciles on load.
-      };
-    } catch (_) {
-      /* live push unavailable — list still loads on boot */
-    }
-  }
-
   /* ---------------------------- bootstrap ---------------------------- */
 
   async function boot() {
@@ -159,10 +96,6 @@
     });
 
     await Promise.all([loadOverview(), loadRestaurants(), loadDeliveryGroups(), loadPricing(), loadRequests()]);
-
-    bindNotifBell();
-    loadNotifications();
-    if (currentRole === 'owner') connectOwnerEvents();
 
     // Requests filters
     const reqStatus = document.getElementById('requests-status');

@@ -74,10 +74,8 @@
 
       await reloadInfo();
       bindChrome();
-      bindNotifBell();
       switchTab('dashboard');
       connectEvents();
-      loadNotifications();
     } catch (err) {
       toast(err.message || I.t('failedLoad'), 'error');
     }
@@ -524,55 +522,6 @@
     if (!document.getElementById('tab-bookings').classList.contains('hidden')) fetchBookings();
   }
 
-  /* ------------------------- notifications (005) ----------------------- */
-
-  async function loadNotifications() {
-    try {
-      const box = await api.get('/api/admin/notifications?limit=20');
-      renderBell(box);
-    } catch (_) {
-      /* bell stays empty when offline or unauthorized */
-    }
-  }
-
-  function renderBell(box) {
-    const count = document.getElementById('notif-count');
-    const has = box && box.unreadCount > 0;
-    count.textContent = has ? box.unreadCount : '';
-    count.classList.toggle('hidden', !has);
-    const panel = document.getElementById('notif-panel');
-    const rows = (box && box.notifications) || [];
-    panel.innerHTML = rows.length
-      ? rows.map((n) =>
-          '<button class="notif-item' + (n.isRead ? '' : ' notif-unread') + '" data-id="' + esc(n.id) + '">' +
-          '<strong>' + esc(n.title) + '</strong>' +
-          '<small>' + esc(n.orderCode || '') + ' · ' + esc(fmtDateTime(n.createdAt)) + '</small></button>'
-        ).join('')
-      : '<div class="muted" style="padding:8px 10px">' + esc(I.t('notifEmpty')) + '</div>';
-    panel.querySelectorAll('.notif-item').forEach((b) => {
-      b.addEventListener('click', async () => {
-        try {
-          await api.patch('/api/admin/notifications/' + encodeURIComponent(b.dataset.id) + '/read');
-        } catch (_) {
-          /* already read or gone — still navigate */
-        }
-        panel.classList.add('hidden');
-        switchTab('orders');
-        loadNotifications();
-      });
-    });
-  }
-
-  function bindNotifBell() {
-    const bell = document.getElementById('notif-bell');
-    const panel = document.getElementById('notif-panel');
-    bell.setAttribute('aria-label', I.t('notifBell'));
-    bell.addEventListener('click', () => panel.classList.toggle('hidden'));
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('.notif-wrap')) panel.classList.add('hidden');
-    });
-  }
-
   /* ------------------------- live updates (SSE) ----------------------- */
 
   let eventSource = null;
@@ -584,7 +533,6 @@
     eventSource.addEventListener('order:new', () => {
       toast(I.t('newOrderToast'), 'success');
       refreshCurrentOrdersView();
-      loadNotifications();
       if (!document.getElementById('tab-dashboard').classList.contains('hidden')) loadDashboard();
     });
     eventSource.addEventListener('order:status', () => refreshCurrentOrdersView());
@@ -594,7 +542,6 @@
       if (!document.getElementById('tab-dashboard').classList.contains('hidden')) loadDashboard();
     });
     eventSource.addEventListener('booking:status', () => refreshBookingsView());
-    eventSource.addEventListener('notification:new', () => loadNotifications());
     eventSource.onerror = () => {
       // EventSource retries automatically.
     };
@@ -603,7 +550,6 @@
     eventSource.onopen = () => {
       refreshCurrentOrdersView();
       refreshBookingsView();
-      loadNotifications();
       if (!document.getElementById('tab-dashboard').classList.contains('hidden')) loadDashboard();
     };
   }

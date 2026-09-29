@@ -226,15 +226,6 @@ async function createCheckout({ restaurantId, payload }) {
       );
     }
 
-    // Persistent notifications ride the same commit: a committed order always
-    // has its notifications; a rolled-back order has none (005, R1).
-    await require('./notifications.service').fanOut(client, {
-      orderId: orderRow.id,
-      restaurantId,
-      title: `New order ${orderRow.code}`,
-      body: `${totalUnits} items · ${total} cents`,
-    });
-
     return orderRow;
   });
 }

@@ -57,13 +57,6 @@ router.post(
       totalCents: order.total_cents,
       orderType: payload.orderType,
     });
-    // Persist-first, event-second: rows already committed above; these are hints only (005).
-    sse.broadcast(restaurant.id, 'notification:new', { orderCode: order.code });
-    sse.broadcast('__platform__', 'notification:new', {
-      orderCode: order.code,
-      restaurantId: restaurant.id,
-      restaurantSlug: restaurant.slug,
-    });
 
     res.status(201).json({
       order: {
