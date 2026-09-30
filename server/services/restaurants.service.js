@@ -147,7 +147,7 @@ async function getPublicView(slug) {
   const items = (
     await query(
       `SELECT id, category_id, name, description, price_cents, image_path,
-              is_available, is_popular
+              is_available, is_popular, is_preorder, preorder_note
        FROM menu_items WHERE restaurant_id = $1
        ORDER BY position, created_at`,
       [restaurant.id]

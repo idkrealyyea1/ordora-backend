@@ -40,6 +40,7 @@
       bkDate: 'التاريخ', bkTime: 'الوقت', bkNotes: 'ملاحظات', bookNow: 'تأكيد الحجز',
       bookingCreated: 'تم إرسال طلب الحجز', close: 'إغلاق', currencies: 'ر.س',
       optRequired: 'مطلوب', optNeedMore: 'أكمل الاختيارات المطلوبة قبل الإضافة',
+      preorderBadge: 'طلب مسبق',
     },
     en: {
       open: 'Open now', closed: 'Currently closed', share: 'Share menu', book: 'Book a table',
@@ -63,6 +64,7 @@
       bkDate: 'Date', bkTime: 'Time', bkNotes: 'Notes', bookNow: 'Confirm booking',
       bookingCreated: 'Booking request sent', close: 'Close', currencies: '',
       optRequired: 'Required', optNeedMore: 'Please complete the required choices first',
+      preorderBadge: 'Pre-order',
     },
   };
   let lang = 'ar';
@@ -311,7 +313,9 @@
     }
     return '<article class="dish">' + img +
       '<div class="dish-main"><div><h3>' + esc(item.name) + '</h3>' +
-      (item.description ? '<p>' + esc(item.description) + '</p>' : '') + '</div>' +
+      (item.description ? '<p>' + esc(item.description) + '</p>' : '') +
+      (item.is_preorder ? '<p><span class="preorder-tag">' + esc(t().preorderBadge) + '</span>' +
+        (item.preorder_note ? ' <span>' + esc(item.preorder_note) + '</span>' : '') + '</p>' : '') + '</div>' +
       '<div class="dish-foot"><span class="price-red">' + esc(money(item.price_cents)) + '</span>' + action + '</div>' +
       '</div></article>';
   }
@@ -356,9 +360,12 @@
       '<button class="cart-close" data-close>×</button></div>' +
       entries.map((e) => {
         const names = selNames(e.item, e.selections);
+        const poNote = e.item.is_preorder
+          ? '<small>' + esc(t().preorderBadge) + (e.item.preorder_note ? ': ' + esc(e.item.preorder_note) : '') + '</small>'
+          : '';
         return '<div class="cart-row"><img src="' + esc(e.item.image_path || FOOD) + '" alt="">' +
           '<div class="cart-row-main"><strong>' + esc(e.item.name) + '</strong>' +
-          (names ? '<small>' + esc(names) + '</small>' : '') +
+          (names ? '<small>' + esc(names) + '</small>' : '') + poNote +
           '<small>' + esc(money(estimateUnit(e.item, e.selections) * e.qty)) + '</small></div>' +
           qtyCtl(e.key, e.qty, e.item.name) + '</div>';
       }).join('') +

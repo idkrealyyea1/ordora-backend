@@ -237,7 +237,7 @@ async function createCheckout({ restaurantId, payload }) {
 
     // Prices & availability from DB only.
     const itemRes = await client.query(
-      `SELECT id, name, price_cents FROM menu_items
+      `SELECT id, name, price_cents, is_preorder, preorder_note FROM menu_items
        WHERE restaurant_id = $1 AND is_available = TRUE AND id = ANY($2::uuid[])`,
       [restaurantId, [...wanted.keys()]]
     );
@@ -276,6 +276,8 @@ async function createCheckout({ restaurantId, payload }) {
         quantity: qty,
         lineTotalCents: lineTotal,
         snapshots,
+        isPreorder: Boolean(row.is_preorder),
+        preorderNote: row.is_preorder ? String(row.preorder_note || '') : '',
       });
     }
 
@@ -345,9 +347,9 @@ async function createCheckout({ restaurantId, payload }) {
 
     for (const line of lines) {
       const { rows: lineRows } = await client.query(
-        `INSERT INTO order_items (order_id, menu_item_id, item_name, unit_price_cents, quantity, line_total_cents)
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-        [orderRow.id, line.menuItemId, line.itemName, line.unitPriceCents, line.quantity, line.lineTotalCents]
+        `INSERT INTO order_items (order_id, menu_item_id, item_name, unit_price_cents, quantity, line_total_cents, is_preorder, preorder_note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+        [orderRow.id, line.menuItemId, line.itemName, line.unitPriceCents, line.quantity, line.lineTotalCents, line.isPreorder, line.preorderNote]
       );
       for (const snap of line.snapshots) {
         await client.query(
@@ -406,7 +408,8 @@ async function getForRestaurant(orderId, restaurantId) {
   if (!order) throw notFound('Order not found');
   order.items = (
     await query(
-      `SELECT id, menu_item_id, item_name, unit_price_cents, quantity, line_total_cents
+      `SELECT id, menu_item_id, item_name, unit_price_cents, quantity, line_total_cents,
+              is_preorder, preorder_note
        FROM order_items WHERE order_id = $1 ORDER BY created_at`,
       [id]
     )
@@ -647,7 +650,8 @@ async function exportRows(restaurantId, { revenueOnly, status, limit = 5000 } = 
 
   order.items = (
     await query(
-      `SELECT id, menu_item_id, item_name, unit_price_cents, quantity, line_total_cents
+      `SELECT id, menu_item_id, item_name, unit_price_cents, quantity, line_total_cents,
+              is_preorder, preorder_note
        FROM order_items WHERE order_id = $1 ORDER BY created_at`,
       [order.id]
     )

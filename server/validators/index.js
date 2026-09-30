@@ -156,6 +156,8 @@ function validateItemCreate(body = {}) {
     imagePath: body.imagePath === undefined || body.imagePath === '' ? null : assertUploadPath(body.imagePath),
     isAvailable: toBool(body.isAvailable, 'isAvailable', true),
     isPopular: toBool(body.isPopular, 'isPopular', false),
+    isPreorder: toBool(body.isPreorder, 'isPreorder', false),
+    preorderNote: cleanText(body.preorderNote, { field: 'preorderNote', max: 300 }) || '',
     position:
       body.position === undefined || body.position === null || body.position === ''
         ? undefined
@@ -172,6 +174,8 @@ function validateItemUpdate(body = {}) {
   if (body.imagePath !== undefined) patch.imagePath = body.imagePath === null || body.imagePath === '' ? null : assertUploadPath(body.imagePath);
   if (body.isAvailable !== undefined) patch.isAvailable = toBool(body.isAvailable, 'isAvailable');
   if (body.isPopular !== undefined) patch.isPopular = toBool(body.isPopular, 'isPopular');
+  if (body.isPreorder !== undefined) patch.isPreorder = toBool(body.isPreorder, 'isPreorder');
+  if (body.preorderNote !== undefined) patch.preorderNote = cleanText(body.preorderNote, { field: 'preorderNote', max: 300 }) || '';
   if (body.position !== undefined) patch.position = toIntInRange(body.position, 'position', { min: 0, max: 99999 });
   if (Object.keys(patch).length === 0) throw badRequest('No updatable fields provided');
   return patch;

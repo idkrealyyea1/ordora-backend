@@ -71,6 +71,9 @@
       (((it.options || []).length)
         ? '<br><small>' + esc(it.options.map((o) => o.choice_name + (o.quantity > 1 ? ' ×' + o.quantity : '')).join(', ')) + '</small>'
         : '') +
+      (it.is_preorder
+        ? '<br><small>' + esc(I.t('preorderBadge')) + (it.preorder_note ? ': ' + esc(it.preorder_note) : '') + '</small>'
+        : '') +
       '</span><span>' +
       fmtMoney(it.line_total_cents, currency) + '</span></div>'
     ).join('');

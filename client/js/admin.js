@@ -306,6 +306,7 @@
                 const optNames = (it.options || []).map((o) => o.choice_name + (o.quantity > 1 ? ' ×' + o.quantity : '')).join(', ');
                 return '<li>' + esc(it.quantity) + ' &times; ' + esc(it.item_name) +
                   (optNames ? ' <span class="muted">(' + esc(optNames) + ')</span>' : '') +
+                  (it.is_preorder ? ' <span class="badge">' + esc(I.t('preorderBadge')) + (it.preorder_note ? ': ' + esc(it.preorder_note) : '') + '</span>' : '') +
                   ' — ' + fmtMoney(it.line_total_cents, currency) + '</li>';
               }).join('') +
               '</ul>');
@@ -730,6 +731,9 @@
         '</div>' +
         '<div class="checkbox-line mb-1"><input id="it-available" type="checkbox"' + (!item || item.is_available ? ' checked' : '') + '><label for="it-available">' + esc(I.t('availableL')) + '</label></div>' +
         '<div class="checkbox-line mb-1"><input id="it-popular" type="checkbox"' + (item && item.is_popular ? ' checked' : '') + '><label for="it-popular">' + esc(I.t('popularL')) + '</label></div>' +
+        '<div class="checkbox-line mb-1"><input id="it-preorder" type="checkbox"' + (item && item.is_preorder ? ' checked' : '') + '><label for="it-preorder">' + esc(I.t('preorderBadge')) + '</label></div>' +
+        '<div class="field"><label for="it-prenote">' + esc(I.t('preorderBadge')) + '</label>' +
+          '<input id="it-prenote" maxlength="300" value="' + esc(item ? (item.preorder_note || '') : '') + '"></div>' +
         '<div class="field mt-2"><label for="it-image">' + esc(I.t('imageL')) + '</label>' +
           (!isNew && item.image_path ? '<img src="' + esc(item.image_path) + '" alt="" class="mb-1" width="120" height="90">' : '') +
           '<input id="it-image" type="file" accept="image/jpeg,image/png,image/webp">' +
@@ -759,6 +763,8 @@
         priceCents: Math.round(priceMajor * 100),
         isAvailable: document.getElementById('it-available').checked,
         isPopular: document.getElementById('it-popular').checked,
+        isPreorder: document.getElementById('it-preorder').checked,
+        preorderNote: document.getElementById('it-prenote').value.trim(),
       };
       try {
         submitBtn.disabled = true;
