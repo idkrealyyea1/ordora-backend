@@ -68,6 +68,106 @@ function assertTransition(current, next, orderType) {
 /* ------------------------------------------------------------------ */
 
 /**
+ * Price one cart line's option selections from trusted definitions.
+ * min/max count distinct choices; quantities accumulate per choice and are
+ * capped by that choice's max_quantity. Replace-mode groups are single-pick
+ * by schema and set the unit price; adjust-mode adds price × quantity.
+ * Pushes frozen snapshot rows into `snapshots`. Throws on any mismatch —
+ * client money is never read.
+ */
+async function priceSelections(client, { restaurantId, menuItemId, baseCents, selections, snapshots }) {
+  const { rows } = await client.query(
+    `SELECT g.id AS group_id, g.name AS group_name, g.is_required, g.min_picks, g.max_picks, g.pricing,
+            c.id AS choice_id, c.name AS choice_name, c.price_cents, c.max_quantity, c.is_available
+     FROM option_groups g
+     JOIN option_choices c ON c.group_id = g.id AND c.restaurant_id = g.restaurant_id
+     WHERE g.restaurant_id = $1 AND g.menu_item_id = $2
+     ORDER BY g.position, g.name, c.position, c.name`,
+    [restaurantId, menuItemId]
+  );
+  const groups = new Map();
+  for (const r of rows) {
+    if (!groups.has(r.group_id)) {
+      groups.set(r.group_id, {
+        name: r.group_name, minPicks: r.min_picks, maxPicks: r.max_picks,
+        pricing: r.pricing, choices: new Map(),
+      });
+    }
+    groups.get(r.group_id).choices.set(r.choice_id, r);
+  }
+  const seen = new Set();
+  let unit = baseCents;
+  for (const sel of selections) {
+    const g = groups.get(sel.groupId);
+    if (!g) throw badRequest('Unknown option selection', [{ field: 'selections' }]);
+    if (seen.has(sel.groupId)) throw badRequest('Duplicate option group in selection', [{ field: 'selections' }]);
+    seen.add(sel.groupId);
+    const qtyByChoice = new Map();
+    for (const line of sel.choices) {
+      qtyByChoice.set(line.choiceId, (qtyByChoice.get(line.choiceId) || 0) + line.quantity);
+    }
+    if (qtyByChoice.size < g.minPicks || qtyByChoice.size > g.maxPicks) {
+      throw badRequest(`Pick between ${g.minPicks} and ${g.maxPicks} for "${g.name}"`, [{ field: 'selections' }]);
+    }
+    if (g.pricing === 'replace') {
+      const [[choiceId]] = [...qtyByChoice.entries()];
+      const c = g.choices.get(choiceId);
+      if (!c) throw badRequest('Unknown option selection', [{ field: 'selections' }]);
+      if (!c.is_available) throw conflict('ITEMS_UNAVAILABLE', `"${c.choice_name}" is no longer available. Please refresh the menu.`);
+      unit = c.price_cents;
+      snapshots.push({
+        groupId: sel.groupId, groupName: g.name, choiceId,
+        choiceName: c.choice_name, unitPriceCents: c.price_cents, quantity: 1,
+      });
+    } else {
+      for (const [choiceId, qty] of qtyByChoice) {
+        const c = g.choices.get(choiceId);
+        if (!c) throw badRequest('Unknown option selection', [{ field: 'selections' }]);
+        if (!c.is_available) throw conflict('ITEMS_UNAVAILABLE', `"${c.choice_name}" is no longer available. Please refresh the menu.`);
+        if (qty > c.max_quantity) throw badRequest(`At most ${c.max_quantity} × "${c.choice_name}"`, [{ field: 'selections' }]);
+        unit += c.price_cents * qty;
+        snapshots.push({
+          groupId: sel.groupId, groupName: g.name, choiceId,
+          choiceName: c.choice_name, unitPriceCents: c.price_cents, quantity: qty,
+        });
+      }
+    }
+  }
+  for (const [gid, g] of groups) {
+    if (g.minPicks > 0 && !seen.has(gid)) throw badRequest(`"${g.name}" is required`, [{ field: 'selections' }]);
+  }
+  return unit;
+}
+
+/**
+ * Attach frozen option snapshots to order-item rows (which must carry `id`).
+ * Lines without options get `options: []`.
+ */
+async function attachOptionSnapshots(runner, items) {
+  if (!items.length) return items;
+  const { rows } = await runner.query(
+    `SELECT order_item_id, group_name, choice_name, unit_price_cents, quantity, line_total_cents
+     FROM order_item_options WHERE order_item_id = ANY($1::uuid[]) ORDER BY created_at`,
+    [items.map((i) => i.id)]
+  );
+  const byLine = new Map(items.map((i) => [i.id, []]));
+  for (const r of rows) {
+    const list = byLine.get(r.order_item_id);
+    if (list) {
+      list.push({
+        group_name: r.group_name,
+        choice_name: r.choice_name,
+        unit_price_cents: Number(r.unit_price_cents),
+        quantity: r.quantity,
+        line_total_cents: Number(r.line_total_cents),
+      });
+    }
+  }
+  for (const i of items) i.options = byLine.get(i.id) || [];
+  return items;
+}
+
+/**
  * payload: {
  *   customerName, customerWhatsapp, customerPhone?, customerAddress?,
  *   orderType: 'pickup'|'delivery', notes?,
@@ -147,16 +247,35 @@ async function createCheckout({ restaurantId, payload }) {
 
     const lines = [];
     let subtotal = 0;
+    // Merge duplicate item entries (and their selections) exactly like quantities.
+    const selByItem = new Map();
+    for (const p of payload.items) {
+      const key = String(p.itemId).toLowerCase();
+      selByItem.set(key, (selByItem.get(key) || []).concat(p.selections || []));
+    }
     for (const row of itemRes.rows) {
       const qty = wanted.get(row.id);
-      const lineTotal = row.price_cents * qty;
+      let unit = row.price_cents;
+      const snapshots = [];
+      const sels = selByItem.get(String(row.id).toLowerCase()) || [];
+      if (sels.length > 0) {
+        unit = await priceSelections(client, {
+          restaurantId,
+          menuItemId: row.id,
+          baseCents: row.price_cents,
+          selections: sels,
+          snapshots,
+        });
+      }
+      const lineTotal = unit * qty;
       subtotal += lineTotal;
       lines.push({
         menuItemId: row.id,
         itemName: row.name,
-        unitPriceCents: row.price_cents,
+        unitPriceCents: unit,
         quantity: qty,
         lineTotalCents: lineTotal,
+        snapshots,
       });
     }
 
@@ -225,11 +344,23 @@ async function createCheckout({ restaurantId, payload }) {
     }
 
     for (const line of lines) {
-      await client.query(
+      const { rows: lineRows } = await client.query(
         `INSERT INTO order_items (order_id, menu_item_id, item_name, unit_price_cents, quantity, line_total_cents)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
         [orderRow.id, line.menuItemId, line.itemName, line.unitPriceCents, line.quantity, line.lineTotalCents]
       );
+      for (const snap of line.snapshots) {
+        await client.query(
+          `INSERT INTO order_item_options
+             (order_item_id, group_id, choice_id, group_name, choice_name,
+              unit_price_cents, quantity, line_total_cents)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            lineRows[0].id, snap.groupId, snap.choiceId, snap.groupName, snap.choiceName,
+            snap.unitPriceCents, snap.quantity, snap.unitPriceCents * snap.quantity,
+          ]
+        );
+      }
     }
 
     return orderRow;
@@ -280,6 +411,7 @@ async function getForRestaurant(orderId, restaurantId) {
       [id]
     )
   ).rows;
+  await attachOptionSnapshots({ query }, order.items);
   return order;
 }
 
@@ -479,6 +611,13 @@ async function exportRows(restaurantId, { revenueOnly, status, limit = 5000 } = 
             o.customer_phone, o.customer_address, o.notes,
             o.subtotal_cents, o.delivery_fee_cents, o.total_cents,
             UPPER(COALESCE(o.currency, 'USD')) AS currency,
+            (SELECT COALESCE(string_agg(s, ', '), '') FROM (
+               SELECT DISTINCT ooo.choice_name ||
+                 CASE WHEN ooo.quantity > 1 THEN ' ×' || ooo.quantity ELSE '' END AS s
+               FROM order_items oi
+               JOIN order_item_options ooo ON ooo.order_item_id = oi.id
+               WHERE oi.order_id = o.id
+             ) t) AS options_summary,
             o.created_at, o.updated_at
      FROM orders o
      WHERE ${where} AND o.archived_at IS NULL
@@ -508,11 +647,13 @@ async function exportRows(restaurantId, { revenueOnly, status, limit = 5000 } = 
 
   order.items = (
     await query(
-      `SELECT menu_item_id, item_name, unit_price_cents, quantity, line_total_cents
+      `SELECT id, menu_item_id, item_name, unit_price_cents, quantity, line_total_cents
        FROM order_items WHERE order_id = $1 ORDER BY created_at`,
       [order.id]
     )
   ).rows;
+  await attachOptionSnapshots({ query }, order.items);
+  for (const item of order.items) delete item.id;
   delete order.id;
   return order;
 }

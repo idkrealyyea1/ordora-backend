@@ -67,7 +67,11 @@
 
     const currency = order.currency;
     const rows = order.items.map((it) =>
-      '<div class="total-row"><span>' + esc(it.quantity) + ' &times; ' + esc(it.item_name) + '</span><span>' +
+      '<div class="total-row"><span>' + esc(it.quantity) + ' &times; ' + esc(it.item_name) +
+      (((it.options || []).length)
+        ? '<br><small>' + esc(it.options.map((o) => o.choice_name + (o.quantity > 1 ? ' ×' + o.quantity : '')).join(', ')) + '</small>'
+        : '') +
+      '</span><span>' +
       fmtMoney(it.line_total_cents, currency) + '</span></div>'
     ).join('');
 

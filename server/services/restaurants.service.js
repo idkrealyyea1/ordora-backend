@@ -154,6 +154,12 @@ async function getPublicView(slug) {
     )
   ).rows;
 
+  const optionDefs = await require('./options.service').definitionsForItems(
+    restaurant.id,
+    items.map((i) => i.id)
+  );
+  for (const item of items) item.options = optionDefs.get(item.id) || [];
+
   const openNow =
     restaurant.status === 'open' &&
     (settings.ignore_opening_hours || isOpenNow(hours, settings.timezone));

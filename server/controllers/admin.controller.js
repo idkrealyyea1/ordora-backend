@@ -11,6 +11,7 @@ const config = require('../../config');
 const restaurants = require('../services/restaurants.service');
 const categoriesService = require('../services/categories.service');
 const menu = require('../services/menu.service');
+const options = require('../services/options.service');
 const orders = require('../services/orders.service');
 const bookings = require('../services/bookings.service');
 const settingsService = require('../services/settings.service');
@@ -18,6 +19,7 @@ const sse = require('../middleware/sse');
 const delivery = require('../services/delivery.service');
 const { handleImageUpload, persistSavedImage, deleteUpload } = require('../middleware/upload');
 const { sendCsv } = require('../utils/csv');
+const { assertUuid } = require('../utils/checks');
 const { forbidden, notFound, badRequest } = require('../utils/errors');
 const { asyncHandler } = require('../utils/errors');
 const v = require('../validators');
@@ -191,6 +193,50 @@ async function deleteItem(req, res) {
   res.json({ ok: true });
 }
 
+/* ---------------------- product options -------------------------- */
+
+async function listOptionGroups(req, res) {
+  const { menuItemId } = req.query || {};
+  if (!menuItemId) throw badRequest('menuItemId query is required', [{ field: 'menuItemId' }]);
+  res.json({ groups: await options.listGroupsOwned(tenantId(req), assertUuid(menuItemId, 'menuItemId')) });
+}
+
+async function createOptionGroup(req, res) {
+  const data = v.validateOptionGroupCreate(req.body);
+  res.status(201).json({ group: await options.createGroupOwned(tenantId(req), data) });
+}
+
+async function updateOptionGroup(req, res) {
+  const patch = v.validateOptionGroupUpdate(req.body);
+  res.json({ group: await options.updateGroupOwned(tenantId(req), req.params.id, patch) });
+}
+
+async function deleteOptionGroup(req, res) {
+  await options.deleteGroupOwned(tenantId(req), req.params.id);
+  res.json({ ok: true });
+}
+
+async function listOptionChoices(req, res) {
+  res.json({ choices: await options.listChoicesOwned(tenantId(req), req.params.id) });
+}
+
+async function createOptionChoice(req, res) {
+  const data = v.validateOptionChoiceCreate(req.body);
+  res.status(201).json({ choice: await options.createChoiceOwned(tenantId(req), req.params.id, data) });
+}
+
+async function updateOptionChoice(req, res) {
+  const patch = v.validateOptionChoiceUpdate(req.body);
+  res.json({
+    choice: await options.updateChoiceOwned(tenantId(req), req.params.groupId, req.params.choiceId, patch),
+  });
+}
+
+async function deleteOptionChoice(req, res) {
+  await options.deleteChoiceOwned(tenantId(req), req.params.groupId, req.params.choiceId);
+  res.json({ ok: true });
+}
+
 /* ------------------------- settings ------------------------------ */
 
 async function getSettings(req, res) {
@@ -297,12 +343,12 @@ async function ordersReportCsv(req, res) {
   const rows = await orders.exportRows(id, { revenueOnly, status: req.query.status || null });
   const header = [
     'Code', 'Status', 'Type', 'Customer', 'WhatsApp', 'Phone', 'Address', 'Notes',
-    'Subtotal (cents)', 'Delivery fee (cents)', 'Total (cents)', 'Currency', 'Created', 'Updated',
+    'Subtotal (cents)', 'Delivery fee (cents)', 'Total (cents)', 'Currency', 'Options', 'Created', 'Updated',
   ];
   const body = rows.map((r) => [
     r.code, r.status, r.order_type, r.customer_name, r.customer_whatsapp, r.customer_phone,
     r.customer_address, r.notes, r.subtotal_cents, r.delivery_fee_cents, r.total_cents,
-    r.currency || 'USD', r.created_at, r.updated_at,
+    r.currency || 'USD', r.options_summary || '', r.created_at, r.updated_at,
   ]);
   sendCsv(res, `orders-${id.slice(0, 8)}.csv`, [header, ...body]);
 }
@@ -356,6 +402,14 @@ module.exports = {
   createItem: asyncHandler(createItem),
   updateItem: asyncHandler(updateItem),
   deleteItem: asyncHandler(deleteItem),
+  listOptionGroups: asyncHandler(listOptionGroups),
+  createOptionGroup: asyncHandler(createOptionGroup),
+  updateOptionGroup: asyncHandler(updateOptionGroup),
+  deleteOptionGroup: asyncHandler(deleteOptionGroup),
+  listOptionChoices: asyncHandler(listOptionChoices),
+  createOptionChoice: asyncHandler(createOptionChoice),
+  updateOptionChoice: asyncHandler(updateOptionChoice),
+  deleteOptionChoice: asyncHandler(deleteOptionChoice),
   getSettings: asyncHandler(getSettings),
   updateSettings: asyncHandler(updateSettings),
   getHours: asyncHandler(getHours),

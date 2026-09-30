@@ -39,6 +39,7 @@
       bkName: 'الاسم', bkWA: 'واتساب', bkPhone: 'هاتف (اختياري)', bkTables: 'عدد الطاولات',
       bkDate: 'التاريخ', bkTime: 'الوقت', bkNotes: 'ملاحظات', bookNow: 'تأكيد الحجز',
       bookingCreated: 'تم إرسال طلب الحجز', close: 'إغلاق', currencies: 'ر.س',
+      optRequired: 'مطلوب', optNeedMore: 'أكمل الاختيارات المطلوبة قبل الإضافة',
     },
     en: {
       open: 'Open now', closed: 'Currently closed', share: 'Share menu', book: 'Book a table',
@@ -61,6 +62,7 @@
       bkName: 'Name', bkWA: 'WhatsApp', bkPhone: 'Phone (optional)', bkTables: 'Tables',
       bkDate: 'Date', bkTime: 'Time', bkNotes: 'Notes', bookNow: 'Confirm booking',
       bookingCreated: 'Booking request sent', close: 'Close', currencies: '',
+      optRequired: 'Required', optNeedMore: 'Please complete the required choices first',
     },
   };
   let lang = 'ar';
@@ -95,6 +97,9 @@
       const clean = {};
       for (const [k, v] of Object.entries(raw)) {
         if (Number.isInteger(v) && v > 0 && v <= 99) clean[k] = v;
+        else if (v && Number.isInteger(v.qty) && v.qty > 0 && v.qty <= 99 && Array.isArray(v.selections)) {
+          clean[k] = { qty: v.qty, selections: v.selections };
+        }
       }
       return clean;
     } catch (_) { return {}; }
@@ -112,13 +117,48 @@
 
   /* --------------------------- derived ----------------------------- */
   const money = (cents) => fmtMoney(cents, (view && view.settings && view.settings.currency) || 'USD');
+  // Pending option picks per item (card pickers only; server re-validates all).
+  const picks = {};
+  const pickMap = (itemId) => picks[itemId] || (picks[itemId] = {});
+  // Display-only unit estimate from definitions (server computes truth).
+  function estimateUnit(item, sels) {
+    let unit = item.price_cents;
+    const groups = {};
+    for (const g of (item.options || [])) groups[g.id] = g;
+    for (const sel of (sels || [])) {
+      const g = groups[sel.groupId];
+      if (!g) continue;
+      if (g.pricing === 'replace' && sel.choices.length) {
+        const c = (g.choices || []).find((x) => x.id === sel.choices[0].choiceId);
+        if (c) unit = c.price_cents;
+      } else {
+        for (const line of sel.choices) {
+          const c = (g.choices || []).find((x) => x.id === line.choiceId);
+          if (c) unit += c.price_cents * line.quantity;
+        }
+      }
+    }
+    return unit;
+  }
+  const normSels = (sels) => (sels || []).map((s) => ({
+    groupId: s.groupId,
+    choices: (s.choices || []).map((c) => ({ choiceId: c.choiceId, quantity: c.quantity })),
+  }));
   function cartEntries() {
     if (!view) return [];
     return Object.entries(cart)
-      .map(([id, qty]) => ({ item: view.items.find((i) => i.id === id), qty }))
-      .filter((e) => e.item && e.item.is_available);
+      .map(([key, v]) => {
+        const legacyQty = Number.isInteger(v) ? v : 0;
+        const itemId = legacyQty ? key : key.split('#')[0];
+        const item = view.items.find((i) => i.id === itemId);
+        if (!item || !item.is_available) return null;
+        const qty = legacyQty || (v.qty || 0);
+        if (!qty) return null;
+        return { key, item, qty, selections: legacyQty ? [] : normSels(v.selections) };
+      })
+      .filter(Boolean);
   }
-  const subtotalCents = () => cartEntries().reduce((s, e) => s + e.item.price_cents * e.qty, 0);
+  const subtotalCents = () => cartEntries().reduce((s, e) => s + estimateUnit(e.item, e.selections) * e.qty, 0);
   const feeCents = () => (orderType === 'delivery' ? Number((view && view.settings && view.settings.deliveryFeeCents) || 0) : 0);
   const totalUnits = () => cartEntries().reduce((s, e) => s + e.qty, 0);
   // D4: delivery availability is the restaurant's own setting toggle, not company linkage.
@@ -251,16 +291,24 @@
     zone.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => changeCart(b.dataset.add, 1)));
     zone.querySelectorAll('[data-plus]').forEach((b) => b.addEventListener('click', () => changeCart(b.dataset.plus, 1)));
     zone.querySelectorAll('[data-minus]').forEach((b) => b.addEventListener('click', () => changeCart(b.dataset.minus, -1)));
+    wirePicks(zone);
   }
 
   function dishCard(item) {
-    const q = cart[item.id] || 0;
+    const hasOpts = (item.options || []).length > 0;
+    const q = (!hasOpts && Number.isInteger(cart[item.id])) ? cart[item.id] : 0;
     const img = '<div class="dish-img"><img loading="lazy" src="' + esc(item.image_path || FOOD) + '" alt="' + esc(item.name) + '">' +
       (item.is_popular ? '<b>' + esc(t().top) + '</b>' : '') + '</div>';
-    const action = !item.is_available
-      ? '<span class="soldout-tag">' + esc(t().soldOut) + '</span>'
-      : (q ? qtyCtl(item.id, q, item.name)
-        : '<button class="add-btn" data-add="' + esc(item.id) + '">＋ ' + esc(t().add) + '</button>');
+    let action;
+    if (!item.is_available) {
+      action = '<span class="soldout-tag">' + esc(t().soldOut) + '</span>';
+    } else if (!hasOpts) {
+      action = q ? qtyCtl(item.id, q, item.name)
+        : '<button class="add-btn" data-add="' + esc(item.id) + '">＋ ' + esc(t().add) + '</button>';
+    } else {
+      action = pickerHtml(item) +
+        '<button class="add-btn" data-addopts="' + esc(item.id) + '">＋ ' + esc(t().add) + '</button>';
+    }
     return '<article class="dish">' + img +
       '<div class="dish-main"><div><h3>' + esc(item.name) + '</h3>' +
       (item.description ? '<p>' + esc(item.description) + '</p>' : '') + '</div>' +
@@ -306,9 +354,14 @@
     root.innerHTML = '<div class="cart-overlay"><section class="cart-modal">' +
       '<div class="cart-title"><div><small>' + totalUnits() + ' ' + esc(t().items) + '</small><h2>' + esc(t().cart) + '</h2></div>' +
       '<button class="cart-close" data-close>×</button></div>' +
-      entries.map((e) => '<div class="cart-row"><img src="' + esc(e.item.image_path || FOOD) + '" alt="">' +
-        '<div class="cart-row-main"><strong>' + esc(e.item.name) + '</strong><small>' + esc(money(e.item.price_cents * e.qty)) + '</small></div>' +
-        qtyCtl(e.item.id, e.qty, e.item.name) + '</div>').join('') +
+      entries.map((e) => {
+        const names = selNames(e.item, e.selections);
+        return '<div class="cart-row"><img src="' + esc(e.item.image_path || FOOD) + '" alt="">' +
+          '<div class="cart-row-main"><strong>' + esc(e.item.name) + '</strong>' +
+          (names ? '<small>' + esc(names) + '</small>' : '') +
+          '<small>' + esc(money(estimateUnit(e.item, e.selections) * e.qty)) + '</small></div>' +
+          qtyCtl(e.key, e.qty, e.item.name) + '</div>';
+      }).join('') +
       (hasDelivery()
         ? '<div class="co-type"><button data-type="pickup"' + (orderType === 'pickup' ? ' class="active"' : '') + '>' + esc(t().pickup) + '</button>' +
           '<button data-type="delivery"' + (orderType === 'delivery' ? ' class="active"' : '') + '>' + esc(t().delivery) + '</button></div>'
@@ -361,14 +414,130 @@
     try { modal.focus({ preventScroll: true }); } catch (_) { /* older browsers */ }
   }
 
-  function changeCart(id, delta) {
+  function changeCart(key, delta) {
     stashCo();
-    const next = Math.max(0, (cart[id] || 0) + delta);
-    if (next) cart[id] = next; else delete cart[id];
+    const cur = cart[key];
+    const curQty = Number.isInteger(cur) ? cur : ((cur && cur.qty) || 0);
+    const next = Math.max(0, curQty + delta);
+    if (next) {
+      cart[key] = (Number.isInteger(cur) || cur === undefined)
+        ? next
+        : { qty: next, selections: cur.selections };
+    } else delete cart[key];
     saveCart();
     renderBar();
     updateGrids();
     if (cartOpen || bookingOpen) renderOverlay();
+  }
+
+  /* --------------------- product option picks ---------------------- */
+  // Pending picks live only in the card (server re-validates everything).
+  // picks[itemId][groupId] = {choiceId: qty}.
+  function pickState(itemId) {
+    return picks[itemId] || (picks[itemId] = {});
+  }
+  function pickPrice(item, group, choice) {
+    return group.pricing === 'replace'
+      ? esc(money(choice.price_cents))
+      : '+' + esc(money(choice.price_cents));
+  }
+  function pickerHtml(item) {
+    return '<div class="opt-groups">' + (item.options || []).map((g) => {
+      const single = g.max_picks === 1;
+      const pm = pickState(item.id)[g.id] || {};
+      const head = '<div class="opt-head"><strong>' + esc(g.name) + '</strong>' +
+        (g.min_picks > 0 ? ' <span class="opt-req">' + esc(t().optRequired) + '</span>' : '') + '</div>';
+      const body = single
+        ? '<div class="opt-opts">' + (g.choices || []).map((c) =>
+          '<button type="button" class="opt-pick' + (pm[c.id] ? ' active' : '') + '" data-opt="' +
+          esc(item.id + '|' + g.id + '|' + c.id) + '"' + (c.is_available ? '' : ' disabled') + '>' +
+          esc(c.name) + ' <span>' + pickPrice(item, g, c) + '</span></button>').join('') + '</div>'
+        : '<div class="opt-opts">' + (g.choices || []).map((c) =>
+          '<div class="opt-row"><span>' + esc(c.name) + ' <span>' + pickPrice(item, g, c) + '</span></span>' +
+          '<div class="qty"><button type="button" data-optminus="' + esc(item.id + '|' + g.id + '|' + c.id) + '">−</button>' +
+          '<span>' + (pm[c.id] || 0) + '</span>' +
+          '<button type="button" data-optplus="' + esc(item.id + '|' + g.id + '|' + c.id) + '"' +
+          (c.is_available ? '' : ' disabled') + '>＋</button></div></div>').join('') + '</div>';
+      return '<div class="opt-group">' + head + body + '</div>';
+    }).join('') + '</div>' +
+    '<p class="opt-error hidden" id="opterr-' + esc(item.id) + '">' + esc(t().optNeedMore) + '</p>';
+  }
+  function wirePicks(zone) {
+    zone.querySelectorAll('[data-opt]').forEach((b) => b.addEventListener('click', () => {
+      const [itemId, groupId, choiceId] = b.dataset.opt.split('|');
+      const pm = pickState(itemId);
+      if (pm[groupId] && pm[groupId][choiceId]) delete pm[groupId];
+      else pm[groupId] = { [choiceId]: 1 };
+      updateGrids();
+    }));
+    zone.querySelectorAll('[data-optplus]').forEach((b) => b.addEventListener('click', () => {
+      const [itemId, groupId, choiceId] = b.dataset.optplus.split('|');
+      const item = view.items.find((i) => i.id === itemId);
+      const g = (item.options || []).find((x) => x.id === groupId);
+      const c = ((g && g.choices) || []).find((x) => x.id === choiceId);
+      if (!c || !c.is_available) return;
+      const pm = pickState(itemId);
+      const cur = pm[groupId] || (pm[groupId] = {});
+      const distinct = Object.keys(cur).length;
+      if (!cur[choiceId] && distinct >= g.max_picks) return;
+      cur[choiceId] = Math.min((cur[choiceId] || 0) + 1, c.max_quantity);
+      updateGrids();
+    }));
+    zone.querySelectorAll('[data-optminus]').forEach((b) => b.addEventListener('click', () => {
+      const [itemId, groupId, choiceId] = b.dataset.optminus.split('|');
+      const pm = pickState(itemId);
+      const cur = pm[groupId] || {};
+      if (!cur[choiceId]) return;
+      cur[choiceId] -= 1;
+      if (cur[choiceId] <= 0) delete cur[choiceId];
+      if (Object.keys(cur).length === 0) delete pm[groupId];
+      updateGrids();
+    }));
+    zone.querySelectorAll('[data-addopts]').forEach((b) => b.addEventListener('click', () => addWithPicks(b.dataset.addopts)));
+  }
+  function picksValid(item) {
+    const pm = pickState(item.id);
+    return (item.options || []).every((g) => Object.keys(pm[g.id] || {}).length >= g.min_picks);
+  }
+  function addWithPicks(itemId) {
+    const item = view.items.find((i) => i.id === itemId);
+    if (!item || !item.is_available) return;
+    const err = document.getElementById('opterr-' + itemId);
+    if (!picksValid(item)) {
+      if (err) err.classList.remove('hidden');
+      return;
+    }
+    if (err) err.classList.add('hidden');
+    const pm = pickState(itemId);
+    const selections = Object.entries(pm).map(([groupId, choices]) => ({
+      groupId,
+      choices: Object.entries(choices).map(([choiceId, quantity]) => ({ choiceId, quantity })),
+    }));
+    const key = itemId + '#' + selections
+      .map((s) => s.groupId + ':' + s.choices.map((c) => c.choiceId + 'x' + c.quantity).join(',')).join(';');
+    const cur = cart[key];
+    cart[key] = { qty: ((cur && cur.qty) || 0) + 1, selections };
+    delete picks[itemId];
+    stashCo();
+    saveCart();
+    renderBar();
+    updateGrids();
+    if (cartOpen || bookingOpen) renderOverlay();
+  }
+  // Human-readable selection names for cart rows and messages.
+  function selNames(item, sels) {
+    const groups = {};
+    for (const g of (item.options || [])) groups[g.id] = g;
+    const parts = [];
+    for (const s of (sels || [])) {
+      const g = groups[s.groupId];
+      if (!g) continue;
+      for (const line of (s.choices || [])) {
+        const c = (g.choices || []).find((x) => x.id === line.choiceId);
+        if (c) parts.push(c.name + (line.quantity > 1 ? ' ×' + line.quantity : ''));
+      }
+    }
+    return parts.join(', ');
   }
 
   /* ---------------------------- checkout --------------------------- */
@@ -409,7 +578,7 @@
         customerName: f.customerName, customerWhatsapp: f.customerWhatsapp,
         customerPhone: f.customerPhone, customerAddress: f.customerAddress,
         notes: f.notes, orderType, submissionKey: submitKey,
-        items: cartEntries().map((e) => ({ itemId: e.item.id, quantity: e.qty })),
+        items: cartEntries().map((e) => ({ itemId: e.item.id, quantity: e.qty, selections: e.selections })),
       });
       cart = {}; co = { name: '', wa: '', phone: '', address: '', notes: '' };
       submitKey = null;
@@ -430,7 +599,10 @@
     const restaurantWa = ((view.settings && view.settings.whatsapp) || '').replace(/[^0-9]/g, '');
     if (!restaurantWa) { coError(t().noWA); return; }
     const entries = cartEntries();
-    const lines = entries.map((e) => e.qty + '× ' + e.item.name).join('\n');
+    const lines = entries.map((e) => {
+      const names = selNames(e.item, e.selections);
+      return e.qty + '× ' + e.item.name + (names ? ' (' + names + ')' : '');
+    }).join('\n');
     let msg = 'السلام عليكم ' + view.name + '، أريد طلب:\n' + lines +
       '\n' + t().total + ': ' + money(subtotalCents() + feeCents()) +
       '\n' + t().yourName + ': ' + f.customerName + '\n' + t().waNumber + ': ' + f.customerWhatsapp;

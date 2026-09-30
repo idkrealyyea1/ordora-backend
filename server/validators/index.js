@@ -268,6 +268,7 @@ function validateCheckout(body = {}) {
   const items = body.items.map((line) => ({
     itemId: assertUuid(line && line.itemId, 'items[].itemId'),
     quantity: toIntInRange(line && line.quantity, 'items[].quantity', { min: 1, max: 99 }),
+    selections: validateSelections(line && line.selections),
   }));
 
   // Optional idempotency key: client-generated UUID per order attempt. Repeat
@@ -374,6 +375,102 @@ function validatePagination(query) {
   return { limit, offset: (page - 1) * limit, page };
 }
 
+/* ---------------------- product options ---------------------- */
+
+const OPTION_PRICING_MODES = ['replace', 'adjust'];
+
+function validateGroupPricing(value) {
+  const mode = String(value === undefined || value === null || value === '' ? 'adjust' : value).trim().toLowerCase();
+  if (!OPTION_PRICING_MODES.includes(mode)) {
+    throw badRequest('pricing must be one of: replace, adjust', [{ field: 'pricing' }]);
+  }
+  return mode;
+}
+
+function checkGroupBounds({ isRequired, minPicks, maxPicks, pricing }) {
+  if (minPicks > maxPicks) throw badRequest('minPicks cannot exceed maxPicks', [{ field: 'minPicks' }]);
+  if (isRequired && minPicks < 1) throw badRequest('required groups need minPicks of at least 1', [{ field: 'minPicks' }]);
+  if (pricing === 'replace' && maxPicks !== 1) {
+    throw badRequest('replace groups allow exactly one pick (maxPicks must be 1)', [{ field: 'maxPicks' }]);
+  }
+}
+
+function validateOptionGroupCreate(body = {}) {
+  const out = {
+    menuItemId: assertUuid(body.menuItemId, 'menuItemId'),
+    name: requireText(body.name, { field: 'name', min: 1, max: 60 }),
+    isRequired: toBool(body.isRequired, 'isRequired', false),
+    minPicks: toIntInRange(body.minPicks, 'minPicks', { min: 0, max: 99, fallback: 0 }),
+    maxPicks: toIntInRange(body.maxPicks, 'maxPicks', { min: 1, max: 99, fallback: 1 }),
+    pricing: validateGroupPricing(body.pricing),
+    position:
+      body.position === undefined || body.position === null || body.position === ''
+        ? undefined
+        : toIntInRange(body.position, 'position', { min: 0, max: 99999 }),
+  };
+  checkGroupBounds(out);
+  return out;
+}
+
+function validateOptionGroupUpdate(body = {}) {
+  const patch = {};
+  if (body.name !== undefined) patch.name = requireText(body.name, { field: 'name', min: 1, max: 60 });
+  if (body.isRequired !== undefined) patch.isRequired = toBool(body.isRequired, 'isRequired');
+  if (body.minPicks !== undefined) patch.minPicks = toIntInRange(body.minPicks, 'minPicks', { min: 0, max: 99 });
+  if (body.maxPicks !== undefined) patch.maxPicks = toIntInRange(body.maxPicks, 'maxPicks', { min: 1, max: 99 });
+  if (body.pricing !== undefined) patch.pricing = validateGroupPricing(body.pricing);
+  if (body.position !== undefined) patch.position = toIntInRange(body.position, 'position', { min: 0, max: 99999 });
+  if (Object.keys(patch).length === 0) throw badRequest('No updatable fields provided');
+  return patch;
+}
+
+function validateOptionChoiceCreate(body = {}) {
+  return {
+    name: requireText(body.name, { field: 'name', min: 1, max: 60 }),
+    priceCents: toIntInRange(body.priceCents, 'priceCents', { min: 0, max: 10000000, fallback: 0 }),
+    maxQuantity: toIntInRange(body.maxQuantity, 'maxQuantity', { min: 1, max: 99, fallback: 1 }),
+    isAvailable: toBool(body.isAvailable, 'isAvailable', true),
+    position:
+      body.position === undefined || body.position === null || body.position === ''
+        ? undefined
+        : toIntInRange(body.position, 'position', { min: 0, max: 99999 }),
+  };
+}
+
+function validateOptionChoiceUpdate(body = {}) {
+  const patch = {};
+  if (body.name !== undefined) patch.name = requireText(body.name, { field: 'name', min: 1, max: 60 });
+  if (body.priceCents !== undefined) patch.priceCents = toIntInRange(body.priceCents, 'priceCents', { min: 0, max: 10000000 });
+  if (body.maxQuantity !== undefined) patch.maxQuantity = toIntInRange(body.maxQuantity, 'maxQuantity', { min: 1, max: 99 });
+  if (body.isAvailable !== undefined) patch.isAvailable = toBool(body.isAvailable, 'isAvailable');
+  if (body.position !== undefined) patch.position = toIntInRange(body.position, 'position', { min: 0, max: 99999 });
+  if (Object.keys(patch).length === 0) throw badRequest('No updatable fields provided');
+  return patch;
+}
+
+/**
+ * Structural shape only (unknown fields dropped, client prices impossible:
+ * no price field exists). Tenant scope, rules, and pricing are enforced
+ * against trusted definitions at checkout write time.
+ */
+function validateSelections(selections) {
+  if (selections === undefined || selections === null) return [];
+  if (!Array.isArray(selections)) throw badRequest('selections must be an array', [{ field: 'selections' }]);
+  if (selections.length > 20) throw badRequest('Too many option groups', [{ field: 'selections' }]);
+  return selections.map((sel) => {
+    if (!Array.isArray(sel && sel.choices) || sel.choices.length === 0 || sel.choices.length > 20) {
+      throw badRequest('Each selection needs 1-20 choices', [{ field: 'selections' }]);
+    }
+    return {
+      groupId: assertUuid(sel.groupId, 'selections[].groupId'),
+      choices: sel.choices.map((line) => ({
+        choiceId: assertUuid(line && line.choiceId, 'selections[].choiceId'),
+        quantity: toIntInRange(line && line.quantity, 'selections[].quantity', { min: 1, max: 99 }),
+      })),
+    };
+  });
+}
+
 module.exports = {
   validateLogin,
   validateRestaurantCreate,
@@ -399,5 +496,10 @@ module.exports = {
   validatePlatformPricing,
   validateRestaurantRequest,
   validatePagination,
+  validateOptionGroupCreate,
+  validateOptionGroupUpdate,
+  validateOptionChoiceCreate,
+  validateOptionChoiceUpdate,
+  validateSelections,
   assertUuid,
 };

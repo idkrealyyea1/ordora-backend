@@ -32,6 +32,18 @@ router.post('/items', admin.createItem);
 router.patch('/items/:id', admin.updateItem);
 router.delete('/items/:id', forbidStaffDelete, admin.deleteItem);
 
+// Product option groups (tenant-scoped; ?menuItemId= required for listing)
+router.get('/option-groups', admin.listOptionGroups);
+router.post('/option-groups', admin.createOptionGroup);
+router.patch('/option-groups/:id', admin.updateOptionGroup);
+router.delete('/option-groups/:id', forbidStaffDelete, admin.deleteOptionGroup);
+
+// Choices within a group
+router.get('/option-groups/:id/choices', admin.listOptionChoices);
+router.post('/option-groups/:id/choices', admin.createOptionChoice);
+router.patch('/option-groups/:groupId/choices/:choiceId', admin.updateOptionChoice);
+router.delete('/option-groups/:groupId/choices/:choiceId', forbidStaffDelete, admin.deleteOptionChoice);
+
 // Orders
 router.get('/orders', admin.listOrders);
 router.get('/orders/:id', admin.getOrder);

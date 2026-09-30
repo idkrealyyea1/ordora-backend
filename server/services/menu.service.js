@@ -19,6 +19,11 @@ async function listOwned(restaurantId) {
      ORDER BY c.position, c.name, m.position, m.created_at`,
     [restaurantId]
   );
+  const defs = await require('./options.service').definitionsForItems(
+    restaurantId,
+    rows.map((r) => r.id)
+  );
+  for (const row of rows) row.options = defs.get(row.id) || [];
   return rows;
 }
 

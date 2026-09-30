@@ -302,7 +302,12 @@
           if (!el.querySelector('.order-lines')) {
             head.insertAdjacentHTML('afterend',
               '<ul class="order-lines small">' +
-              res.order.items.map((it) => '<li>' + esc(it.quantity) + ' &times; ' + esc(it.item_name) + ' — ' + fmtMoney(it.line_total_cents, currency) + '</li>').join('') +
+              res.order.items.map((it) => {
+                const optNames = (it.options || []).map((o) => o.choice_name + (o.quantity > 1 ? ' ×' + o.quantity : '')).join(', ');
+                return '<li>' + esc(it.quantity) + ' &times; ' + esc(it.item_name) +
+                  (optNames ? ' <span class="muted">(' + esc(optNames) + ')</span>' : '') +
+                  ' — ' + fmtMoney(it.line_total_cents, currency) + '</li>';
+              }).join('') +
               '</ul>');
           }
           btn.remove();
@@ -732,9 +737,12 @@
           '<div id="it-image-progress" class="progress hidden"><div id="it-image-progress-fill" class="progress-fill"></div></div>' +
         '</div>' +
         '<button id="it-save" type="submit" class="btn btn-block">' + esc(isNew ? I.t('createItemBtn') : I.t('saveChangesBtn')) + '</button>' +
-      '</form>'
+      '</form>' +
+      (!isNew ? '<div id="item-options" class="mt-2"></div>' : '')
     );
     document.querySelector('.modal-close').addEventListener('click', closeModal);
+
+    if (!isNew) loadItemOptions(item.id);
 
     document.getElementById('item-form').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -807,6 +815,92 @@
       loadMenu();
     } catch (err) {
       toast(err.message, 'error');
+    }
+  }
+
+  /* --------------------- product option groups --------------------- */
+
+  async function loadItemOptions(itemId) {
+    const zone = document.getElementById('item-options');
+    if (!zone) return;
+    try {
+      const d = await api.get('/api/admin/option-groups?menuItemId=' + encodeURIComponent(itemId));
+      const groups = d.groups || [];
+      const withChoices = await Promise.all(groups.map(async (g) => ({
+        group: g,
+        choices: (await api.get('/api/admin/option-groups/' + g.id + '/choices')).choices || [],
+      })));
+      zone.innerHTML = '<h3 class="section-title">' + esc(I.t('optGroups')) + '</h3>' +
+        withChoices.map(({ group: g, choices }) =>
+          '<div class="card mb-1"><div class="flex-between"><strong>' + esc(g.name) + '</strong>' +
+          '<span><span class="badge">' + esc(g.pricing) + '</span> ' +
+          (g.is_required ? '<span class="badge badge-closed">' + esc(I.t('optRequired')) + '</span> ' : '') +
+          '<span class="muted small">' + g.min_picks + '–' + g.max_picks + '</span> ' +
+          '<button type="button" class="btn btn-danger btn-sm" data-del-group="' + esc(g.id) + '">' + esc(I.t('del')) + '</button></span></div>' +
+          (choices.length
+            ? '<div class="table-wrap"><table class="data"><tbody>' + choices.map((c) =>
+              '<tr><td>' + esc(c.name) + '</td><td>' + fmtMoney(c.price_cents, currency) +
+              '</td><td class="small muted">×' + c.max_quantity + (c.is_available ? '' : ' · ' + esc(I.t('soldOut'))) + '</td>' +
+              '<td><button type="button" class="btn btn-danger btn-sm" data-del-choice="' + esc(g.id + '|' + c.id) + '">' +
+              esc(I.t('del')) + '</button></td></tr>').join('') + '</tbody></table></div>'
+            : '') +
+          '<form data-choice-form="' + esc(g.id) + '" class="flex-between">' +
+            '<input maxlength="60" required placeholder="' + esc(I.t('optChoices')) + '">' +
+            '<input type="number" min="0" step="0.01" value="0" title="' + esc(I.t('optPrice')) + '">' +
+            '<button type="submit" class="btn btn-outline btn-sm">' + esc(I.t('optAddChoice')) + '</button>' +
+          '</form></div>'
+        ).join('') +
+        '<form id="group-form" class="card"><div class="form-row form-row-2">' +
+          '<div class="field"><label>' + esc(I.t('optGroups')) + '</label>' +
+            '<input id="ng-name" maxlength="60" required></div>' +
+          '<div class="field"><label>' + esc(I.t('optPricing')) + '</label>' +
+            '<select id="ng-pricing"><option value="adjust">adjust</option><option value="replace">replace</option></select></div>' +
+        '</div><div class="form-row form-row-2">' +
+          '<div class="field"><label>' + esc(I.t('optMinMax')) + '</label>' +
+            '<input id="ng-min" type="number" min="0" max="99" value="0"> <input id="ng-max" type="number" min="1" max="99" value="1"></div>' +
+          '<div class="field"><label>&nbsp;</label><div class="checkbox-line"><input id="ng-req" type="checkbox">' +
+            '<label for="ng-req">' + esc(I.t('optRequired')) + '</label></div></div>' +
+        '</div><button type="submit" class="btn btn-block">' + esc(I.t('optAddGroup')) + '</button></form>';
+
+      zone.querySelectorAll('[data-del-group]').forEach((b) => b.addEventListener('click', async () => {
+        try { await api.del('/api/admin/option-groups/' + b.dataset.delGroup); loadItemOptions(itemId); loadMenu(); }
+        catch (err) { toast(err.message, 'error'); }
+      }));
+      zone.querySelectorAll('[data-del-choice]').forEach((b) => b.addEventListener('click', async () => {
+        const [gid, cid] = b.dataset.delChoice.split('|');
+        try { await api.del('/api/admin/option-groups/' + gid + '/choices/' + cid); loadItemOptions(itemId); }
+        catch (err) { toast(err.message, 'error'); }
+      }));
+      zone.querySelectorAll('[data-choice-form]').forEach((f) => f.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const inputs = f.querySelectorAll('input');
+        const priceMajor = parseFloat(inputs[1].value);
+        try {
+          await api.post('/api/admin/option-groups/' + f.dataset.choiceForm + '/choices', {
+            name: inputs[0].value.trim(),
+            priceCents: Math.max(0, Math.round((Number.isFinite(priceMajor) ? priceMajor : 0) * 100)),
+          });
+          loadItemOptions(itemId);
+        } catch (err) { toast(err.message, 'error'); }
+      }));
+      const gf = document.getElementById('group-form');
+      if (gf) gf.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+          await api.post('/api/admin/option-groups', {
+            menuItemId: itemId,
+            name: document.getElementById('ng-name').value.trim(),
+            isRequired: document.getElementById('ng-req').checked,
+            minPicks: Number(document.getElementById('ng-min').value),
+            maxPicks: Number(document.getElementById('ng-max').value),
+            pricing: document.getElementById('ng-pricing').value,
+          });
+          loadItemOptions(itemId);
+          loadMenu();
+        } catch (err) { toast(err.message, 'error'); }
+      });
+    } catch (err) {
+      zone.innerHTML = '<p class="notice notice-error">' + esc(err.message) + '</p>';
     }
   }
 
