@@ -9,6 +9,7 @@
 const QRCode = require('qrcode');
 const config = require('../../config');
 const restaurants = require('../services/restaurants.service');
+const subscriptions = require('../services/subscriptions.service');
 const categoriesService = require('../services/categories.service');
 const menu = require('../services/menu.service');
 const options = require('../services/options.service');
@@ -56,6 +57,7 @@ async function myRestaurant(req, res) {
     },
     settings,
     openNow: await settingsService.computeOpenNow(id),
+    subscription: await subscriptions.statusFor(id).catch(() => null),
   });
 }
 
@@ -81,7 +83,7 @@ async function dashboard(req, res) {
     itemCount: await restaurants.countItems(id),
     maxMenuItems: restaurant ? restaurant.max_menu_items : null,
     openNow: await settingsService.computeOpenNow(id),
-    subscription: await restaurants.getSubscription(id),
+    subscription: await subscriptions.statusFor(id).catch(() => null),
   });
 }
 

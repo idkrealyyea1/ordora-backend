@@ -57,16 +57,16 @@
 
 ### Tests for User Story 1 (write FIRST, ensure FAIL before implementation)
 
-- [ ] T010 [P] [US1] TDD `tests/signup.test.js`: successful signup (201 shape per `contracts/signup.md` + signed-in session), duplicate email/username safe-409 with zero partial rows, invalid business type/slug rejected, second-business attempt by an owning session → 403, `trialEndsAt ≈ now()+7d`, transaction rollback leaves no orphan user/business
-- [ ] T011 [P] [US1] TDD `tests/signup-journey.test.js`: end-to-end `POST /api/signup` → category + menu-item via existing admin endpoints (name 1–100, `priceCents` 0–10M) → fulfillment toggle → 7 hours rows → `POST /api/onboarding/complete` → guest checkout 201 on the new storefront → dashboard SSE path unaffected
+- [X] T010 [P] [US1] TDD `tests/signup.test.js`: successful signup (201 shape per `contracts/signup.md` + signed-in session), duplicate email/username safe-409 with zero partial rows, invalid business type/slug rejected, second-business attempt by an owning session → 403, `trialEndsAt ≈ now()+7d`, transaction rollback leaves no orphan user/business
+- [X] T011 [P] [US1] TDD `tests/signup-journey.test.js`: end-to-end `POST /api/signup` → category + menu-item via existing admin endpoints (name 1–100, `priceCents` 0–10M) → fulfillment toggle → 7 hours rows → `POST /api/onboarding/complete` → guest checkout 201 on the new storefront → dashboard SSE path unaffected
 
 ### Implementation for User Story 1
 
-- [ ] T012 [US1] Create wizard shell `client/signup.html` (skeleton-loader-first per convention, `data-i18n` attrs, `lang`/`dir` handling, mobile-firstviewport, one-question-per-step layout)
-- [ ] T013 [P] [US1] Implement generic step machine in `client/js/signup.js` (type → info → setup → product → fulfillment → hours → review → done; progress/position display; calls existing `POST /api/admin/categories`, `POST /api/admin/items`, `PUT /api/admin/hours`, `PATCH /api/admin/settings` plus new state endpoints; no dashboard data fetched)
-- [ ] T014 [P] [US1] Add core wizard strings to both `ar` and `en` dicts in `client/js/i18n.js` (plain nontechnical wording; no tenant/plan/capability jargon)
-- [ ] T015 [US1] Add "Start Free Trial" entry link in `client/index.html` → `/signup.html`
-- [ ] T016 [US1] Build success screen in `client/signup.html` + `client/js/signup.js` (open store, go to dashboard, share via existing share pattern, QR via existing `GET /api/admin/qr`)
+- [X] T012 [US1] Create wizard shell `client/signup.html` (skeleton-loader-first per convention, `data-i18n` attrs, `lang`/`dir` handling, mobile-firstviewport, one-question-per-step layout)
+- [X] T013 [P] [US1] Implement generic step machine in `client/js/signup.js` (type → info → setup → product → fulfillment → hours → review → done; progress/position display; calls existing `POST /api/admin/categories`, `POST /api/admin/items`, `PUT /api/admin/hours`, `PATCH /api/admin/settings` plus new state endpoints; no dashboard data fetched)
+- [X] T014 [P] [US1] Add core wizard strings to both `ar` and `en` dicts in `client/js/i18n.js` (plain nontechnical wording; no tenant/plan/capability jargon)
+- [X] T015 [US1] Add "Start Free Trial" entry link in `client/index.html` → `/signup.html`
+- [X] T016 [US1] Build success screen in `client/signup.html` + `client/js/signup.js` (open store, go to dashboard, share via existing share pattern, QR via existing `GET /api/admin/qr`)
 
 **Checkpoint**: User Story 1 fully functional and independently testable (quickstart §2)
 
@@ -80,14 +80,14 @@
 
 ### Tests for User Story 2 (write FIRST, ensure FAIL)
 
-- [ ] T017 [P] [US2] TDD `tests/business-type-profiles.test.js`: signup accepts the 6 named choices + `other` (mapped server-side to a stored CHECK value), raw stored-only values outside the signup set rejected, per-type profile flow/terminology/defaults returned; extends `tests/domain-business-types.test.js` patterns without weakening them
+- [X] T017 [P] [US2] TDD `tests/business-type-profiles.test.js`: signup accepts the 6 named choices + `other` (mapped server-side to a stored CHECK value), raw stored-only values outside the signup set rejected, per-type profile flow/terminology/defaults returned; extends `tests/domain-business-types.test.js` patterns without weakening them
 
 ### Implementation for User Story 2
 
-- [ ] T018 [US2] Create `server/services/business-types.service.js`: static profile per stored type key (flow subset/order, product terminology, default fulfillment, categories policy, relevant/optional capability keys, dashboard emphasis, checklist, help-text i18n keys); adding a type = config + targeted work (depends on T017 failing first)
-- [ ] T019 [US2] Add `GET /api/business-types` (public chooser: key + i18n keys + icon, no entitlement data) and `GET /api/onboarding/profile` (session tenant) to the new route files per `contracts/capabilities.md` (depends on T018)
-- [ ] T020 [US2] Drive `client/js/signup.js` steps from the fetched profile (terminology, defaults, recommended/optional features, help text); zero scattered `if businessType ===` branches outside the profile consumer
-- [ ] T021 [P] [US2] Add type names/descriptions/help strings to `ar`+`en` in `client/js/i18n.js` and render friendly labels wherever the raw snake_case value leaks to owners today (`client/js/owner.js` options, `client/js/admin.js` display; behavior unchanged)
+- [X] T018 [US2] Create `server/services/business-types.service.js`: static profile per stored type key (flow subset/order, product terminology, default fulfillment, categories policy, relevant/optional capability keys, dashboard emphasis, checklist, help-text i18n keys); adding a type = config + targeted work (depends on T017 failing first)
+- [X] T019 [US2] Add `GET /api/business-types` (public chooser: key + i18n keys + icon, no entitlement data) and `GET /api/onboarding/profile` (session tenant) to the new route files per `contracts/capabilities.md` (depends on T018)
+- [X] T020 [US2] Drive `client/js/signup.js` steps from the fetched profile (terminology, defaults, recommended/optional features, help text); zero scattered `if businessType ===` branches outside the profile consumer
+- [X] T021 [P] [US2] Add type names/descriptions/help strings to `ar`+`en` in `client/js/i18n.js` and render friendly labels wherever the raw snake_case value leaks to owners today (`client/js/owner.js` options, `client/js/admin.js` display; behavior unchanged)
 
 **Checkpoint**: User Stories 1 AND 2 both work; type differences visible, platform shared
 
@@ -101,12 +101,12 @@
 
 ### Tests for User Story 3 (write FIRST, ensure FAIL)
 
-- [ ] T022 [P] [US3] TDD `tests/onboarding.test.js`: mid-wizard resume after re-login (step + data preserved), abandonment persists with no auto-delete, `POST /api/onboarding/complete` with missing hours → 409 `INCOMPLETE_SETUP` + `details.missing[]`, double-complete idempotent, unauthenticated access → 401
+- [X] T022 [P] [US3] TDD `tests/onboarding.test.js`: mid-wizard resume after re-login (step + data preserved), abandonment persists with no auto-delete, `POST /api/onboarding/complete` with missing hours → 409 `INCOMPLETE_SETUP` + `details.missing[]`, double-complete idempotent, unauthenticated access → 401
 
 ### Implementation for User Story 3
 
-- [ ] T023 [US3] Implement resume landing in `client/js/signup.js` from `GET /api/onboarding/state` (restore entered data from real rows, jump to next incomplete step, never create a second business)
-- [ ] T024 [US3] Add dashboard continuation banner + readiness percent with next actions in `client/js/admin.js` + `client/admin.html` (visibility only; no route removed) plus its `ar`+`en` strings in `client/js/i18n.js`
+- [X] T023 [US3] Implement resume landing in `client/js/signup.js` from `GET /api/onboarding/state` (restore entered data from real rows, jump to next incomplete step, never create a second business)
+- [X] T024 [US3] Add dashboard continuation banner + readiness percent with next actions in `client/js/admin.js` + `client/admin.html` (visibility only; no route removed) plus its `ar`+`en` strings in `client/js/i18n.js`
 
 **Checkpoint**: Abandoned setups resume cleanly; quickstart §4 passes
 
@@ -120,14 +120,14 @@
 
 ### Tests for User Story 4 (write FIRST, ensure FAIL)
 
-- [ ] T025 [P] [US4] TDD `tests/onboarding-capabilities.test.js`: matrix evaluation true/false per type, hidden-feature direct write rejected (e.g. delivery-gated op with `delivery_enabled=false`), re-evaluation after config change flips access, numeric limit boundary (`menuItemsUsed` vs `max_menu_items`, `canAddProduct`, `MENU_LIMIT_REACHED` preserved), forged `plan`/`capabilities` claims ignored; extends `tests/domain-capabilities.test.js` patterns without weakening them
+- [X] T025 [P] [US4] TDD `tests/onboarding-capabilities.test.js`: matrix evaluation true/false per type, hidden-feature direct write rejected (e.g. delivery-gated op with `delivery_enabled=false`), re-evaluation after config change flips access, numeric limit boundary (`menuItemsUsed` vs `max_menu_items`, `canAddProduct`, `MENU_LIMIT_REACHED` preserved), forged `plan`/`capabilities` claims ignored; extends `tests/domain-capabilities.test.js` patterns without weakening them
 
 ### Implementation for User Story 4
 
-- [ ] T026 [US4] Create `server/services/capabilities.service.js`: static `CAPABILITIES` matrix (`key`, `supportedTypes[]`, `recommendedFor[]`, `configKey|null`, `defaultOn`, `limitKind|null`) + pure live `can(businessRow, key)`; entitlement input is `{ plan: 'trial-placeholder', subscriptionEndsAt }` — no commercial tier names (depends on T025 failing first)
-- [ ] T027 [US4] Add `requireCapability(key)` in `server/middleware/auth.js` (composed after `requireRestaurantAdmin`, session-derived tenant only) and enforce on gated writes: `PUT /api/admin/delivery-groups` plus one second gated write; document the application pattern for future routes (depends on T026)
-- [ ] T028 [US4] Add `GET /api/onboarding/capabilities` (live effective set + `limits{maxMenuItems,menuItemsUsed,canAddProduct}` + `entitlement.plan:'trial-placeholder'`) to `server/routes/onboarding.routes.js` per `contracts/capabilities.md` (depends on T026)
-- [ ] T029 [P] [US4] Render hidden/disabled + emphasized states from profile + effective capabilities in `client/js/admin.js` and `client/js/signup.js` (visibility only; authorization stays server-side)
+- [X] T026 [US4] Create `server/services/capabilities.service.js`: static `CAPABILITIES` matrix (`key`, `supportedTypes[]`, `recommendedFor[]`, `configKey|null`, `defaultOn`, `limitKind|null`) + pure live `can(businessRow, key)`; entitlement input is `{ plan: 'trial-placeholder', subscriptionEndsAt }` — no commercial tier names (depends on T025 failing first)
+- [X] T027 [US4] Add `requireCapability(key)` in `server/middleware/auth.js` (composed after `requireRestaurantAdmin`, session-derived tenant only) and enforce on gated writes: `PUT /api/admin/delivery-groups` plus one second gated write; document the application pattern for future routes (depends on T026)
+- [X] T028 [US4] Add `GET /api/onboarding/capabilities` (live effective set + `limits{maxMenuItems,menuItemsUsed,canAddProduct}` + `entitlement.plan:'trial-placeholder'`) to `server/routes/onboarding.routes.js` per `contracts/capabilities.md` (depends on T026)
+- [X] T029 [P] [US4] Render hidden/disabled + emphasized states from profile + effective capabilities in `client/js/admin.js` and `client/js/signup.js` (visibility only; authorization stays server-side)
 
 **Checkpoint**: Bypass attempts fail server-side; quickstart §5 passes
 
@@ -141,12 +141,12 @@
 
 ### Tests for User Story 5 (write FIRST, ensure FAIL)
 
-- [ ] T030 [P] [US5] TDD `tests/onboarding-i18n.test.js`: every wizard/banner key used by `client/signup.html` + `client/js/signup.js` exists in both `ar` and `en` dicts; owner-facing strings contain no `tenant`/`plan`/`capability` jargon
+- [X] T030 [P] [US5] TDD `tests/onboarding-i18n.test.js`: every wizard/banner key used by `client/signup.html` + `client/js/signup.js` exists in both `ar` and `en` dicts; owner-facing strings contain no `tenant`/`plan`/`capability` jargon
 
 ### Implementation for User Story 5
 
-- [ ] T031 [US5] Accessibility + language pass on `client/signup.html`: semantic controls with labels, visible focus, keyboard-reachable steps, non-color-only status, RTL layout under default `ar` and LTR under `en`
-- [ ] T032 [P] [US5] Mobile/weak-network pass: wizard fetches no dashboard data (profile + state + step endpoints only), skeleton paints first, image-upload failures explained without data loss; per-type dashboard module emphasis in `client/js/admin.js` (reorder/emphasize tabs, never remove routes)
+- [X] T031 [US5] Accessibility + language pass on `client/signup.html`: semantic controls with labels, visible focus, keyboard-reachable steps, non-color-only status, RTL layout under default `ar` and LTR under `en`
+- [X] T032 [P] [US5] Mobile/weak-network pass: wizard fetches no dashboard data (profile + state + step endpoints only), skeleton paints first, image-upload failures explained without data loss; per-type dashboard module emphasis in `client/js/admin.js` (reorder/emphasize tabs, never remove routes)
 
 **Checkpoint**: quickstart §3 passes on narrow viewport in both languages
 
@@ -156,10 +156,10 @@
 
 **Purpose**: Gates before converge — full-suite green, spec checklists, smoke
 
-- [ ] T033 Address reviewer findings in `specs/013-self-service-onboarding/checklists/capabilities.md` (reviewer-owned markers; implementation fixes only, no marker editing by implementer)
-- [ ] T034 [P] `npm run check` 0 failures and `node --test tests/` fully green on disposable `TEST_DATABASE_URL` (existing suites unweakened, new suites included)
-- [ ] T035 Execute `specs/013-self-service-onboarding/quickstart.md` scenarios 1–7 end to end and fix gaps (journey, zero-product, resume, adversarial/isolation, regression, smoke)
-- [ ] T036 [P] Constitution re-check (I–XXVIII) against the diff: no React/build, no new deps, additive migration only, no payments, no duplicate auth/business/product/order/hours/tenant code, hidden-UI-never-authz
+- [X] T033 Address reviewer findings in `specs/013-self-service-onboarding/checklists/capabilities.md` (reviewer-owned markers; implementation fixes only, no marker editing by implementer)
+- [X] T034 [P] `npm run check` 0 failures and `node --test tests/` fully green on disposable `TEST_DATABASE_URL` (existing suites unweakened, new suites included)
+- [X] T035 Execute `specs/013-self-service-onboarding/quickstart.md` scenarios 1–7 end to end and fix gaps (journey, zero-product, resume, adversarial/isolation, regression, smoke)
+- [X] T036 [P] Constitution re-check (I–XXVIII) against the diff: no React/build, no new deps, additive migration only, no payments, no duplicate auth/business/product/order/hours/tenant code, hidden-UI-never-authz
 
 ---
 

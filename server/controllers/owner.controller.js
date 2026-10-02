@@ -58,6 +58,9 @@ async function listRestaurants(req, res) {
       isActive: r.is_active,
       maxMenuItems: r.max_menu_items,
       itemCount: r.item_count,
+      planKey: r.plan_key || null,
+      subStatus: r.sub_status || null,
+      periodEndsAt: r.sub_ends_at || r.subscription_ends_at || null,
       createdAt: r.created_at,
     })),
   });
@@ -429,6 +432,128 @@ async function deleteRestaurantRequest(req, res) {
   res.json({ ok: true });
 }
 
+/* ------------------- subscription management (Task 14) -------------- */
+/* Platform-owner only (routes enforce). Thin handlers over the lifecycle
+   service; the actor is always the session user, never request data. */
+
+async function listPlans(req, res) {
+  const plans = require('../services/plans.service');
+  res.json({ plans: await plans.listPlans() });
+}
+
+async function createPlan(req, res) {
+  const plans = require('../services/plans.service');
+  const data = v.validatePlanCreate(req.body);
+  const plan = await plans.createPlan(data);
+  res.status(201).json(plan);
+}
+
+async function getPlan(req, res) {
+  const plans = require('../services/plans.service');
+  const plan = await plans.getPlan(String(req.params.key || '').trim().toLowerCase());
+  if (!plan) throw notFound('Unknown plan');
+  res.json(plan);
+}
+
+async function updatePlan(req, res) {
+  const plans = require('../services/plans.service');
+  const key = String(req.params.key || '').trim().toLowerCase();
+  const patch = v.validatePlanUpdate(req.body);
+  const plan = await plans.updatePlan(key, patch);
+  if (!plan) throw notFound('Unknown plan');
+  res.json(plan);
+}
+
+function subTarget(req) {
+  const id = assertUuid(req.params.id, 'id');
+  return { id, actorId: req.user ? req.user.id : null };
+}
+
+function toPublicSub(row) {
+  if (!row) return null;
+  return {
+    state: row.status,
+    planId: row.plan_id,
+    trialStartedAt: row.trial_started_at,
+    periodStart: row.current_period_start,
+    periodEndsAt: row.current_period_end,
+    current_period_end: row.current_period_end,
+    graceUntil: row.grace_until,
+    cancelledAt: row.cancelled_at,
+    cancelEffectiveAt: row.cancel_effective_at,
+    suspendedAt: row.suspended_at,
+    suspendReason: row.suspend_reason,
+  };
+}
+
+async function getSubscription(req, res) {
+  const subs = require('../services/subscriptions.service');
+  const { id } = subTarget(req);
+  const detailed = await subs.statusFor(id);
+  res.json(detailed);
+}
+
+async function activateSubscription(req, res) {
+  const subs = require('../services/subscriptions.service');
+  const { id, actorId } = subTarget(req);
+  const data = v.validateSubscriptionActivate(req.body);
+  res.json(toPublicSub(await subs.activate({ restaurantId: id, ...data, actorId })));
+}
+
+async function extendSubscription(req, res) {
+  const subs = require('../services/subscriptions.service');
+  const { id, actorId } = subTarget(req);
+  const data = v.validateSubscriptionExtend(req.body);
+  res.json(toPublicSub(await subs.extend({ restaurantId: id, ...data, actorId })));
+}
+
+async function cancelSubscription(req, res) {
+  const subs = require('../services/subscriptions.service');
+  const { id, actorId } = subTarget(req);
+  const data = v.validateSubscriptionCancel(req.body);
+  res.json(toPublicSub(await subs.cancel({ restaurantId: id, ...data, actorId })));
+}
+
+async function suspendSubscription(req, res) {
+  const subs = require('../services/subscriptions.service');
+  const { id, actorId } = subTarget(req);
+  const data = v.validateSubscriptionSuspend(req.body);
+  res.json(toPublicSub(await subs.suspend({ restaurantId: id, ...data, actorId })));
+}
+
+async function reactivateSubscription(req, res) {
+  const subs = require('../services/subscriptions.service');
+  const { id, actorId } = subTarget(req);
+  const data = v.validateSubscriptionReason(req.body);
+  res.json(toPublicSub(await subs.reactivate({ restaurantId: id, ...data, actorId })));
+}
+
+async function listSubscriptionEvents(req, res) {
+  const { query } = require('../db/pool');
+  const { id } = subTarget(req);
+  const { rows } = await query(
+    `SELECT e.*, u.username AS actor_username FROM subscription_events e
+     LEFT JOIN users u ON u.id = e.actor_user_id
+     WHERE e.restaurant_id = $1 ORDER BY e.created_at DESC`,
+    [id]
+  );
+  res.json({
+    events: rows.map((e) => ({
+      id: e.id,
+      actor: e.actor_username || (e.actor_user_id ? String(e.actor_user_id) : 'system'),
+      action: e.action,
+      oldState: e.old_status,
+      newState: e.new_status,
+      oldPlan: e.old_plan_key,
+      newPlan: e.new_plan_key,
+      oldEndsAt: e.old_ends_at,
+      newEndsAt: e.new_ends_at,
+      reason: e.reason,
+      at: e.created_at,
+    })),
+  });
+}
+
 module.exports = {
   overview: asyncHandler(overview),
   restaurantsReportCsv: asyncHandler(restaurantsReportCsv),
@@ -460,4 +585,15 @@ module.exports = {
   listRestaurantRequests: asyncHandler(listRestaurantRequests),
   updateRestaurantRequestStatus: asyncHandler(updateRestaurantRequestStatus),
   deleteRestaurantRequest: asyncHandler(deleteRestaurantRequest),
+  listPlans: asyncHandler(listPlans),
+  createPlan: asyncHandler(createPlan),
+  getPlan: asyncHandler(getPlan),
+  updatePlan: asyncHandler(updatePlan),
+  getSubscription: asyncHandler(getSubscription),
+  activateSubscription: asyncHandler(activateSubscription),
+  extendSubscription: asyncHandler(extendSubscription),
+  cancelSubscription: asyncHandler(cancelSubscription),
+  suspendSubscription: asyncHandler(suspendSubscription),
+  reactivateSubscription: asyncHandler(reactivateSubscription),
+  listSubscriptionEvents: asyncHandler(listSubscriptionEvents),
 };

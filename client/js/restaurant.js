@@ -37,6 +37,8 @@
       nextSteps: 'احتفظ بهذا الرمز. سنبدأ بتجهيز طلبك فورًا ويمكنك تتبع حالته في أي وقت.',
       enterNameAndWa: 'الرجاء إدخال الاسم ورقم الواتساب', addrRequired: 'الرجاء إدخال عنوان التوصيل',
       noWA: 'الواتساب غير متوفر لهذا المطعم', closedNotice: 'المطعم مغلق حاليًا — يمكنك التصفح وإتمام الطلب عند الافتتاح.',
+      subStoreExpired: 'الطلبات متوقفة مؤقتًا — يمكنك تصفح القائمة.',
+      subStoreSuspended: 'المتجر غير متاح حاليًا — يمكنك تصفح القائمة.',
       noMatch: 'لا توجد أصناف مطابقة.', menuEmpty: 'لا توجد أصناف متاحة حاليًا.',
       soldOut: 'نفد', top: '★ مميز', bookTitle: 'احجز طاولة', bookDesc: 'أخبرنا بتفاصيل زيارتك وسنؤكد حجزك.',
       bkName: 'الاسم', bkWA: 'واتساب', bkPhone: 'هاتف (اختياري)', bkTables: 'عدد الطاولات',
@@ -64,6 +66,8 @@
       nextSteps: 'Keep this code. We will start preparing your order right away and you can track its status anytime.',
       enterNameAndWa: 'Please enter your name and WhatsApp number', addrRequired: 'Please enter the delivery address',
       noWA: 'WhatsApp is not available for this restaurant', closedNotice: 'The restaurant is currently closed — feel free to browse.',
+      subStoreExpired: 'Ordering is paused for now — feel free to browse the menu.',
+      subStoreSuspended: 'This store is currently unavailable — feel free to browse the menu.',
       noMatch: 'No dishes match your search.', menuEmpty: 'No items available right now.',
       soldOut: 'Sold out', top: '★ Top', bookTitle: 'Book a table', bookDesc: 'Tell us about your visit and we will confirm.',
       bkName: 'Name', bkWA: 'WhatsApp', bkPhone: 'Phone (optional)', bkTables: 'Tables',
@@ -243,11 +247,12 @@
         '<div class="live-hero-content"><div class="live-hero-top">' +
           '<span class="status"><i></i>' + esc(view.openNow ? t().open : t().closed) + '</span>' +
           '<span style="display:flex;gap:8px"><button class="outline-btn" style="color:var(--paper);border-color:rgba(255,255,255,.25)" id="share-btn">' + esc(t().share) + '</button>' +
-          '<button class="outline-btn" style="color:var(--paper);border-color:rgba(255,255,255,.25)" id="book-btn">' + esc(t().book) + '</button></span>' +
+          '<button class="outline-btn" style="color:var(--paper);border-color:rgba(255,255,255,.25)" id="book-btn"' + (view.orderingBlocked ? ' disabled' : '') + '>' + esc(t().book) + '</button></span>' +
         '</div><div><h1>' + esc((lang === 'en' && s.nameEn) ? s.nameEn : view.name) + '</h1>' +
         (s.description ? '<p>' + esc(s.description) + '</p>' : '') +
         '<div class="live-meta">' + addr + phone + wa + del + '</div></div></div></section>' +
       (!view.openNow ? '<div class="live-alert warn">' + esc(t().closedNotice) + '</div>' : '') +
+      (view.orderingBlocked ? '<div class="live-alert warn" role="status">' + esc(t()[view.noticeKey === 'sub_store_suspended' ? 'subStoreSuspended' : 'subStoreExpired']) + '</div>' : '') +
       '<section class="live-section-head"><div><small>' + esc(t().menuEye) + '</small><h2>' + esc(t().menuTitle) + '</h2></div></section>' +
       '<label class="search"><input id="menu-search" maxlength="60" aria-label="' + esc(t().search) + '" value="' + esc(searchTerm) + '" placeholder="' + esc(t().search) + '"></label>' +
       '<nav class="category-nav" aria-label="' + esc(t().all) + '">' + cats.map((c) =>
@@ -391,8 +396,8 @@
       '</form>' +
       '<p class="co-error hidden" id="checkout-error"></p>' +
       (sent ? '<p class="live-alert ok">' + esc(t().ready) + ' ' + esc(t().sentHint) + '</p>' : '') +
-      '<button class="co-submit" id="place-order-btn"' + (view.openNow ? '' : ' disabled') + '>' + esc(t().sendSite) + '</button>' +
-      '<button class="whatsapp" id="order-wa-btn"' + (view.openNow ? '' : ' disabled') + '>◌　' + esc(t().sendWA) + '</button>' +
+      '<button class="co-submit" id="place-order-btn"' + (view.openNow && !view.orderingBlocked ? '' : ' disabled') + '>' + esc(t().sendSite) + '</button>' +
+      '<button class="whatsapp" id="order-wa-btn"' + (view.openNow && !view.orderingBlocked ? '' : ' disabled') + '>◌　' + esc(t().sendWA) + '</button>' +
       '<button class="co-ghost" data-close>' + esc(t().keepBrowsing) + '</button>' +
       '</section></div>';
 

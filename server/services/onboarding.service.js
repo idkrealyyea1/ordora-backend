@@ -9,6 +9,7 @@
 
 const { query } = require('../db/pool');
 const { AppError } = require('../utils/errors');
+const businessTypes = require('./business-types.service');
 
 const STEP_ORDER = ['type', 'info', 'setup', 'product', 'fulfillment', 'hours', 'review', 'done'];
 
@@ -96,4 +97,10 @@ function finishedPayload(business) {
   };
 }
 
-module.exports = { getState, setStep, complete, STEP_ORDER };
+async function getProfile(restaurantId) {
+  const business = await getBusiness(restaurantId);
+  if (!business) throw new AppError(404, 'NO_BUSINESS', 'No business is linked to this account');
+  return { businessType: business.business_type, ...businessTypes.getProfile(business.business_type) };
+}
+
+module.exports = { getState, setStep, complete, getProfile, STEP_ORDER };

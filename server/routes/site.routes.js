@@ -48,7 +48,14 @@ router.get('/sitemap.xml', asyncHandler(async (req, res) => {
   let restaurantUrls = [];
   try {
     const { query } = require('../db/pool');
-    const { rows } = await query(`SELECT slug, updated_at FROM restaurants WHERE is_active AND (subscription_ends_at IS NULL OR subscription_ends_at > now()) ORDER BY updated_at DESC LIMIT 500`);
+    const { rows } = await query(`SELECT r.slug, r.updated_at FROM restaurants r
+      LEFT JOIN subscriptions s ON s.restaurant_id = r.id
+      WHERE r.is_active AND (r.subscription_ends_at IS NULL OR r.subscription_ends_at > now())
+        AND (s.status IS NULL OR s.status IN ('trial', 'active', 'grace')
+          OR (s.status = 'cancelled'
+            AND COALESCE(s.cancel_effective_at, s.current_period_end, now()) > now()))
+        AND (s.status IS NULL OR s.status <> 'suspended')
+      ORDER BY r.updated_at DESC LIMIT 500`);
     restaurantUrls = rows.map(r => ({ loc: `${origin}/restaurant/${r.slug}`, lastmod: (r.updated_at || now).toISOString().slice(0,10) }));
   } catch (_) { /* DB not reachable → sitemap with static only */ }
   const urls = [

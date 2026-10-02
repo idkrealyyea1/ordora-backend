@@ -2,7 +2,7 @@
 
 const express = require('express');
 const admin = require('../controllers/admin.controller');
-const { requireAuth, requireRestaurantAdmin, forbidStaffDelete, forbidStaff } = require('../middleware/auth');
+const { requireAuth, requireRestaurantAdmin, forbidStaffDelete, forbidStaff, requireCapability } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -70,8 +70,10 @@ router.put('/hours', admin.updateHours);
 
 // Delivery companies available on the platform (owner-managed);
 // the restaurant chooses which ones deliver for it.
+// Capability-gated (spec 013): configuring delivery companies requires the
+// delivery capability (type-supported, entitled, and delivery enabled).
 router.get('/delivery-groups', admin.listMyDeliveryGroups);
-router.put('/delivery-groups', admin.saveMyDeliveryGroups);
+router.put('/delivery-groups', requireCapability('delivery_groups'), requireCapability('delivery'), admin.saveMyDeliveryGroups);
 
 // Image uploads (?type=logos|covers|items[&itemId=...])
 router.post('/images', ...admin.uploadImage);

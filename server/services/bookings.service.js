@@ -34,9 +34,10 @@ async function create({ restaurantId, payload }) {
     if (!rRows[0]) throw notFound('Restaurant not found');
     if (!rRows[0].is_active) throw conflict('RESTAURANT_UNAVAILABLE', 'Restaurant is not active');
     {
-      const subEndsAt = rRows[0].subscription_ends_at;
-      const active = !subEndsAt || new Date(subEndsAt).getTime() > Date.now();
-      if (!active) throw require('../utils/errors').forbidden('SUBSCRIPTION_EXPIRED', 'Subscription expired — please renew ($19.99/month) | انتهت التجربة — تواصل +972567439846');
+      const { accessAllowed } = require('./subscriptions.service');
+      if (!(await accessAllowed(client, restaurantId))) {
+        throw require('../utils/errors').forbidden('SUBSCRIPTION_EXPIRED', 'Subscription expired — please renew ($19.99/month) | انتهت التجربة — تواصل +972567439846');
+      }
     }
 
     const bookedAt = new Date(payload.bookedAt).toISOString();

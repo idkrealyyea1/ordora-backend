@@ -37,6 +37,20 @@ router.post('/delivery-groups', requireOwner, owner.createDeliveryGroup);
 router.patch('/delivery-groups/:id', requireOwner, owner.updateDeliveryGroup);
 router.delete('/delivery-groups/:id', requireOwner, owner.deleteDeliveryGroup);
 
+// SaaS plans + subscription lifecycle (Task 14) — platform owner only.
+router.get('/plans', requireOwner, owner.listPlans);
+router.post('/plans', requireOwner, owner.createPlan);
+router.get('/plans/:key', requireOwner, owner.getPlan);
+router.patch('/plans/:key', requireOwner, owner.updatePlan);
+
+router.get('/restaurants/:id/subscription', requireOwner, owner.getSubscription);
+router.post('/restaurants/:id/subscription/activate', requireOwner, owner.activateSubscription);
+router.post('/restaurants/:id/subscription/extend', requireOwner, owner.extendSubscription);
+router.post('/restaurants/:id/subscription/cancel', requireOwner, owner.cancelSubscription);
+router.post('/restaurants/:id/subscription/suspend', requireOwner, owner.suspendSubscription);
+router.post('/restaurants/:id/subscription/reactivate', requireOwner, owner.reactivateSubscription);
+router.get('/restaurants/:id/subscription/events', requireOwner, owner.listSubscriptionEvents);
+
 // Platform pricing — Restivo $19.99 editable.
 router.get('/platform-pricing', requireOwner, owner.getPlatformPricing);
 router.patch('/platform-pricing', requireOwner, owner.updatePlatformPricing);

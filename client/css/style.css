@@ -292,6 +292,11 @@ textarea { resize: vertical; min-height: 80px; }
 .checkbox-line { display: flex; align-items: center; gap: 8px; font-weight: 500; font-family: var(--font-ui); }
 .checkbox-line input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); flex-shrink: 0; }
 
+/* Wizard radio cards: full-row touch targets, keyboard-visible focus. */
+.radio-card { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 10px 14px; margin: 6px 0; border: 1px solid var(--border-strong); border-radius: 12px; cursor: pointer; font-weight: 600; }
+.radio-card input[type="radio"], .radio-card input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--primary); flex-shrink: 0; }
+.radio-card:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+
 /* ---------------- badges & pills ---------------- */
 
 .badge {

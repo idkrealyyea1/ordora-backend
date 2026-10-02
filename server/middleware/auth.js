@@ -65,14 +65,12 @@ async function requireRestaurantAdmin(req, res, next) {
     if (req.user.restaurant_is_active === false) {
       return next(forbidden('RESTAURANT_DISABLED', 'This restaurant has been deactivated by the platform owner'));
     }
-    // ponytail: re-validate 7-day trial on every admin request — blocks expired sessions without logout
-    // Expired restaurants keep READ access (dashboards stay readable, FR-004);
-    // mutations stay blocked and new orders are refused in the services.
+    // Trial/subscription gate (Task 14): one joined read resolves the derived
+    // state; mutations stay blocked once access lapses, reads stay reachable.
     try {
-      const { query } = require('../db/pool');
-      const { rows } = await query('SELECT subscription_ends_at FROM restaurants WHERE id = $1', [req.user.restaurant_id]);
-      const endsAt = rows[0] ? rows[0].subscription_ends_at : null;
-      if (endsAt && new Date(endsAt).getTime() <= Date.now() && req.method !== 'GET') {
+      const { getSubscription } = require('../services/restaurants.service');
+      const sub = await getSubscription(req.user.restaurant_id);
+      if (!sub.active && req.method !== 'GET') {
         return next(forbidden('SUBSCRIPTION_EXPIRED', 'انتهت فترة التجربة 7 أيام — تواصل +972567439846 ($19.99/شهر) | 7-day trial finished — contact +972567439846'));
       }
     } catch (e) { return next(e); }
@@ -111,4 +109,42 @@ function tenantIdOf(req) {
   return req.user.restaurant_id;
 }
 
-module.exports = { attachUser, requireAuth, requireOwner, requireOwnerOrStaff, requireRestaurantAdmin, requireDelivery, forbidStaffDelete, forbidStaff, tenantIdOf };
+/**
+ * Capability gate (spec 013). Composed AFTER requireRestaurantAdmin:
+ * tenant comes only from the session; the matrix in
+ * capabilities.service.js is evaluated live (type AND entitlement AND
+ * configuration). Hidden UI is never the enforcement — this is.
+ */
+function requireCapability(key) {
+  return async function capabilityGate(req, res, next) {
+    try {
+      const { query } = require('../db/pool');
+      const { can } = require('../services/capabilities.service');
+      const tenantId = req.user && req.user.role !== 'owner' && req.user.role !== 'staff'
+        ? req.user.restaurant_id
+        : req.query.restaurantId || null;
+      if (!tenantId) return next(forbidden('NO_RESTAURANT', 'Account is not linked to a restaurant'));
+      const { rows } = await query(
+        `SELECT r.business_type, r.subscription_ends_at, s.delivery_enabled
+         FROM restaurants r LEFT JOIN restaurant_settings s ON s.restaurant_id = r.id
+         WHERE r.id = $1`,
+        [tenantId]
+      );
+      if (!rows[0]) return next(forbidden('NO_RESTAURANT', 'Account is not linked to a restaurant'));
+      const ok = can(
+        {
+          businessType: rows[0].business_type || 'restaurant',
+          subscriptionEndsAt: rows[0].subscription_ends_at,
+          settings: { delivery_enabled: rows[0].delivery_enabled },
+        },
+        key
+      );
+      if (!ok) return next(forbidden('CAPABILITY_UNAVAILABLE', 'This feature is not available for your business'));
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+module.exports = { attachUser, requireAuth, requireOwner, requireOwnerOrStaff, requireRestaurantAdmin, requireDelivery, forbidStaffDelete, forbidStaff, tenantIdOf, requireCapability };

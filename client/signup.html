@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>ابدأ متجرك — Restivo</title>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/skeleton.css">
+</head>
+<body>
+  <div id="app-skeleton" aria-hidden="false" aria-label="Loading">
+    <div class="sk-skeleton-topbar">
+      <div class="sk-logo shimmer" aria-hidden="true"></div>
+      <div class="sk-brand shimmer"></div>
+      <div class="sk-nav" aria-hidden="true"><span class="shimmer"></span><span class="shimmer"></span><span class="shimmer"></span><span class="shimmer"></span></div>
+      <div class="sk-actions"><span class="sk-btn shimmer"></span><span class="sk-btn shimmer" style="width:110px"></span></div>
+    </div>
+    <div class="sk-hero">
+      <div class="sk-hero-left">
+        <div class="sk-pill shimmer"></div>
+        <div class="sk-h1 shimmer"></div><div class="sk-h1-2 shimmer"></div>
+        <div class="sk-p shimmer"></div><div class="sk-p-2 shimmer"></div>
+        <div class="sk-cta"><span class="shimmer"></span><span class="shimmer"></span></div>
+      </div>
+      <div class="sk-visual shimmer"><div class="sk-phone shimmer"></div><div class="sk-card shimmer"></div><div class="sk-card shimmer"></div><div class="sk-card shimmer"></div></div>
+    </div>
+    <div class="sk-cards"><div class="sk-mini shimmer"></div><div class="sk-mini shimmer"></div><div class="sk-mini shimmer"></div><div class="sk-mini shimmer"></div><div class="sk-mini shimmer"></div></div>
+  </div>
+  <div id="sk-offline" class="sk-offline" role="status" aria-live="polite">You appear offline — check your connection <button id="sk-offline-retry" type="button">Retry</button></div>
+  <div id="sk-retry" class="sk-retry" role="alert"><p style="margin:0 0 8px; font-weight:700">Connection is slow or offline</p><p class="muted small" style="margin:0 0 12px">The page is taking longer than usual. Check your internet or try again.</p><button id="sk-retry-btn" class="btn btn-sm" type="button">Retry</button></div>
+
+  <header class="topbar">
+    <div class="topbar-inner container">
+      <a class="brand" href="/" data-i18n="brand">Restivo</a>
+    </div>
+  </header>
+
+  <main class="container mt-3">
+    <div class="card">
+      <div id="su-progress" class="muted small" role="status" aria-live="polite"></div>
+      <div id="su-step"></div>
+      <div id="su-nav" class="flex-between mt-2">
+        <button id="su-back" type="button" class="btn btn-outline" data-i18n="su_back">رجوع</button>
+        <button id="su-next" type="button" class="btn btn-primary" data-i18n="su_continue">متابعة</button>
+      </div>
+      <div id="su-error" class="notice notice-error hidden mt-1" role="alert"></div>
+    </div>
+    <p class="muted small mt-1"><a href="/login.html" data-i18n="su_haveAccount">لدي حساب — تسجيل الدخول</a></p>
+  </main>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/signup.js"></script>
+  <script src="/js/skeleton.js"></script>
+</body>
+</html>

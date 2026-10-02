@@ -10,6 +10,9 @@ router.use(requireAuth);
 
 router.get('/state', onboarding.getState);
 router.put('/state', onboarding.setStep);
+router.get('/profile', onboarding.getProfile);
+router.get('/capabilities', onboarding.getCapabilities);
+router.get('/subscription', onboarding.getSubscription);
 router.post('/complete', onboarding.complete);
 
 module.exports = router;

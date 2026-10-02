@@ -603,6 +603,116 @@ function validateOnboardingStep(body = {}) {
   return step;
 }
 
+/* --------------------- subscription plans ----------------------- */
+
+function validatePlanKey(value, field = 'planKey') {
+  const key = String(value || '').trim().toLowerCase();
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(key) || key.length < 2 || key.length > 40) {
+    throw badRequest(`${field} must be 2-40 lowercase letters, digits, or dashes`, [{ field }]);
+  }
+  return key;
+}
+
+function validateEntitlementMap(value) {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw badRequest('entitlements must be an object', [{ field: 'entitlements' }]);
+  }
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    const key = String(k).trim();
+    if (!/^[a-z_]{2,40}$/.test(key)) throw badRequest(`entitlement key invalid: ${k}`, [{ field: 'entitlements' }]);
+    if (typeof v === 'boolean') out[key] = { allowed: v };
+    else if (Number.isInteger(v) && v >= 0) out[key] = { allowed: true, limit: v };
+    else throw badRequest(`entitlement ${k} must be a boolean or non-negative integer`, [{ field: 'entitlements' }]);
+  }
+  return out;
+}
+
+function validatePlanCreate(body = {}) {
+  if (typeof body !== 'object' || body === null) throw badRequest('Invalid plan data');
+  const plan = {
+    key: validatePlanKey(body.key, 'key'),
+    name: requireText(body.name, { field: 'name', min: 2, max: 80 }),
+    description: cleanText(body.description, { field: 'description', max: 500 }) || '',
+    priceCents: toIntInRange(body.priceCents, 'priceCents', { min: 0, max: 1000000 }),
+    currency: String(body.currency || '').trim().toUpperCase(),
+    period: String(body.period || '').trim().toLowerCase(),
+    trialEligible: toBool(body.trialEligible, 'trialEligible', true),
+    entitlements: validateEntitlementMap(body.entitlements) || {},
+  };
+  if (!/^[A-Z]{3}$/.test(plan.currency)) throw badRequest('currency must be a 3-letter code', [{ field: 'currency' }]);
+  if (!['month', 'year'].includes(plan.period)) throw badRequest('period must be month or year', [{ field: 'period' }]);
+  return plan;
+}
+
+function validatePlanUpdate(body = {}) {
+  const patch = {};
+  if (body.name !== undefined) patch.name = requireText(body.name, { field: 'name', min: 2, max: 80 });
+  if (body.description !== undefined) patch.description = cleanText(body.description, { field: 'description', max: 500 }) || '';
+  if (body.priceCents !== undefined) patch.priceCents = toIntInRange(body.priceCents, 'priceCents', { min: 0, max: 1000000 });
+  if (body.currency !== undefined) {
+    const cur = String(body.currency).trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(cur)) throw badRequest('currency must be a 3-letter code', [{ field: 'currency' }]);
+    patch.currency = cur;
+  }
+  if (body.period !== undefined) {
+    const p = String(body.period).trim().toLowerCase();
+    if (!['month', 'year'].includes(p)) throw badRequest('period must be month or year', [{ field: 'period' }]);
+    patch.period = p;
+  }
+  if (body.isActive !== undefined) patch.isActive = toBool(body.isActive, 'isActive');
+  if (body.trialEligible !== undefined) patch.trialEligible = toBool(body.trialEligible, 'trialEligible');
+  if (body.entitlements !== undefined) patch.entitlements = validateEntitlementMap(body.entitlements);
+  if (Object.keys(patch).length === 0) throw badRequest('No updatable fields provided');
+  return patch;
+}
+
+/* ----------------------- subscription actions --------------------- */
+
+function validateSubscriptionActivate(body = {}) {
+  const out = { planKey: validatePlanKey(body.planKey), reason: cleanText(body.reason, { field: 'reason', max: 300 }) || '' };
+  if (body.periodEndsAt !== undefined && body.periodEndsAt !== null && body.periodEndsAt !== '') {
+    const d = new Date(body.periodEndsAt);
+    if (Number.isNaN(d.getTime())) throw badRequest('periodEndsAt must be a valid date', [{ field: 'periodEndsAt' }]);
+    out.periodEndsAt = d.toISOString();
+  }
+  return out;
+}
+
+function validateSubscriptionExtend(body = {}) {
+  const hasDays = body.extendDays !== undefined && body.extendDays !== null && body.extendDays !== '';
+  const hasDate = body.newEndsAt !== undefined && body.newEndsAt !== null && body.newEndsAt !== '';
+  if (hasDays === hasDate) throw badRequest('Provide exactly one of extendDays or newEndsAt', [{ field: 'extendDays' }]);
+  const out = { reason: cleanText(body.reason, { field: 'reason', max: 300 }) || '' };
+  if (hasDays) {
+    const n = Number(body.extendDays);
+    if (!Number.isInteger(n) || n < 1 || n > 3650) throw badRequest('extendDays must be 1-3650', [{ field: 'extendDays' }]);
+    out.extendDays = n;
+  } else {
+    const d = new Date(body.newEndsAt);
+    if (Number.isNaN(d.getTime())) throw badRequest('newEndsAt must be a valid date', [{ field: 'newEndsAt' }]);
+    out.newEndsAt = d.toISOString();
+  }
+  return out;
+}
+
+function validateSubscriptionCancel(body = {}) {
+  const effective = String(body.effective === undefined ? 'period_end' : body.effective).trim().toLowerCase();
+  if (!['now', 'period_end'].includes(effective)) throw badRequest('effective must be now or period_end', [{ field: 'effective' }]);
+  return { effective, reason: cleanText(body.reason, { field: 'reason', max: 300 }) || '' };
+}
+
+function validateSubscriptionSuspend(body = {}) {
+  const reason = cleanText(body.reason, { field: 'reason', max: 300 });
+  if (!reason) throw badRequest('reason is required', [{ field: 'reason' }]);
+  return { reason };
+}
+
+function validateSubscriptionReason(body = {}) {
+  return { reason: cleanText(body && body.reason, { field: 'reason', max: 300 }) || '' };
+}
+
 module.exports = {
   validateLogin,
   validateRestaurantCreate,
@@ -643,5 +753,14 @@ module.exports = {
   validateOnboardingStep,
   ONBOARDING_STEPS,
   SIGNUP_TYPES,
+  validatePlanKey,
+  validateEntitlementMap,
+  validatePlanCreate,
+  validatePlanUpdate,
+  validateSubscriptionActivate,
+  validateSubscriptionExtend,
+  validateSubscriptionCancel,
+  validateSubscriptionSuspend,
+  validateSubscriptionReason,
   assertUuid,
 };

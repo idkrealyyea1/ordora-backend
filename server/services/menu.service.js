@@ -58,15 +58,27 @@ async function createOwned(restaurantId, data) {
     );
     if (!rest.rows[0]) throw notFound('Restaurant not found');
 
+    // Plan limit wins when the assigned plan sets one (Task 14); otherwise
+    // the business row value governs. Same tx, same lock discipline.
+    let max = rest.rows[0].max_menu_items;
+    const planLim = await client.query(
+      `SELECT pe.limit_value FROM subscriptions s
+       JOIN plan_entitlements pe ON pe.plan_id = s.plan_id
+       WHERE s.restaurant_id = $1 AND pe.capability_key = 'max_menu_items'
+         AND pe.limit_value IS NOT NULL`,
+      [restaurantId]
+    );
+    if (planLim.rows[0]) max = planLim.rows[0].limit_value;
+
     const countRes = await client.query(
       'SELECT COUNT(*)::int AS n FROM menu_items WHERE restaurant_id = $1',
       [restaurantId]
     );
-    if (countRes.rows[0].n >= rest.rows[0].max_menu_items) {
+    if (countRes.rows[0].n >= max) {
       throw conflict(
         'MENU_LIMIT_REACHED',
-        `Menu limit reached (${rest.rows[0].max_menu_items} items). Ask the platform owner to raise it.`,
-        [{ limit: rest.rows[0].max_menu_items, used: countRes.rows[0].n }]
+        `Menu limit reached (${max} items). Ask the platform owner to raise it.`,
+        [{ limit: max, used: countRes.rows[0].n }]
       );
     }
 

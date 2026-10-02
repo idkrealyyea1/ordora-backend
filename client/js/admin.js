@@ -74,6 +74,7 @@
 
       await reloadInfo();
       bindChrome();
+      applyEmphasis();
       switchTab('dashboard');
       connectEvents();
     } catch (err) {
@@ -81,12 +82,43 @@
     }
   }
 
+  /* Per-type navigation emphasis (spec 013 US5): reorder nav buttons so the
+     modules relevant to this business type come first. Visibility only —
+     every route keeps its server-side authorization. */
+  function applyEmphasis() {
+    api.get('/api/onboarding/profile').then((p) => {
+      const order = (p && p.dashboardEmphasis) || [];
+      if (!order.length) return;
+      for (const nav of document.querySelectorAll('.dash-side, .tabs-mobile')) {
+        const btns = Array.from(nav.querySelectorAll('[data-tab]'));
+        const rank = (b) => {
+          if (b.dataset.tab === 'dashboard' || b.dataset.tab === 'share') return b.dataset.tab === 'dashboard' ? -1 : order.length + 1;
+          const i = order.indexOf(b.dataset.tab);
+          return i === -1 ? order.length : i;
+        };
+        btns
+          .sort((a, b) => rank(a) - rank(b))
+          .forEach((b) => nav.appendChild(b));
+      }
+    }).catch(() => { /* readers without a tenant keep default order */ });
+  }
+
+  /* Friendly business-type label (spec 013): never show raw snake_case to owners. */
+  function bizLabel(t) {
+    const map = {
+      restaurant: 'bt_restaurant', cafe: 'bt_cafe', dessert_shop: 'bt_dessert', bakery: 'bt_bakery',
+      cake_business: 'bt_cake', home_kitchen: 'bt_home', home_food_business: 'bt_home',
+      cloud_kitchen: 'bt_cloud', small_food_business: 'bt_other',
+    };
+    return map[t] ? I.t(map[t]) : t;
+  }
+
   async function reloadInfo() {
     info = await api.get('/api/admin/restaurant');
     currency = info.settings.currency;
     const bizType = (info.restaurant && info.restaurant.businessType) || 'restaurant';
     document.getElementById('restaurant-name').textContent =
-      info.restaurant.name + (bizType === 'restaurant' ? '' : ' · ' + bizType);
+      info.restaurant.name + (bizType === 'restaurant' ? '' : ' · ' + bizLabel(bizType));
     document.title = info.restaurant.name + ' — Dashboard';
 
     const logo = document.getElementById('brand-logo');
@@ -151,11 +183,38 @@
 
   async function loadDashboard() {
     const zone = document.getElementById('tab-dashboard');
+    // Continuation banner for incomplete self-service setups (spec 013 US3).
+    let banner = '';
+    try {
+      const st = await api.get('/api/onboarding/state');
+      if (st.onboardingStatus === 'in_progress') {
+        banner =
+          '<section class="card" role="status"><h2 class="section-title">' +
+            esc(I.t('su_readyPct', { n: st.completeness })) + '</h2>' +
+            '<p class="muted small">' + esc(I.t('su_resume', { n: (st.next || []).length })) + '</p>' +
+            '<p><a class="btn btn-primary" href="/signup.html">' + esc(I.t('su_resumeGo')) + '</a></p></section>';
+      }
+    } catch (_) { /* admins without a tenant or completed setups: no banner */ }
+    // Grace renewal reminder (spec 014 US5): recovery-first, never a dead end.
+    try {
+      const sub = await api.get('/api/onboarding/subscription');
+      if (sub.state === 'grace') {
+        banner +=
+          '<section class="card" role="status"><h2 class="section-title">' +
+            esc(I.t('sub_grace')) + '</h2>' +
+            '<p class="muted small">' + esc(I.t('sub_grace', { n: sub.daysLeft })) + '</p></section>';
+      }
+    } catch (_) { /* readers without a subscription row keep the default view */ }
     try {
       const d = await api.get('/api/admin/dashboard');
       const usage = d.maxMenuItems ? d.itemCount + ' / ' + d.maxMenuItems : String(d.itemCount);
 
       zone.innerHTML =
+        banner +
+        (d.itemCount === 0
+          ? '<section class="card" role="status"><p class="muted">' + esc(I.t('su_emptyMenu')) +
+            ' <button id="goto-menu" type="button" class="btn btn-outline btn-sm">' + esc(I.t('su_addFirst')) + '</button></p></section>'
+          : '') +
         '<div class="grid-stats mb-2">' +
           statCard(I.t('ordersToday'), d.counts.ordersToday) +
           statCard(I.t('pendingL'), d.counts.pendingOrders) +
@@ -165,17 +224,14 @@
         '<div class="card"><div class="flex-between"><h2 class="section-title">' + esc(I.t('restaurantStatus')) + '</h2>' +
         '<button id="goto-settings" type="button" class="btn btn-outline btn-sm">' + esc(I.t('change')) + '</button></div>' +
         '<p>' + statusText(d.openNow) + '</p></div>' +
-        '<div class="card mt-2"><div class="flex-between"><h2 class="section-title">' + esc(I.t('subscriptionH')) + '</h2>' +
-          '<span class="badge ' + (d.subscription && d.subscription.active ? 'badge-open' : 'badge-closed') + '">' +
-            esc(I.t(d.subscription && d.subscription.active ? 'subActive' : 'subExpired')) + '</span></div>' +
-          '<p class="muted small mt-1">' + esc(I.t('subPrice')) + '</p>' +
-          (d.subscription && d.subscription.endsAt
-            ? '<p class="muted small">' + esc(I.t('subExpires')) + ' ' + fmtDateTime(d.subscription.endsAt) + '</p>'
-            : '<p class="muted small">' + esc(I.t('subRenewHint')) + '</p>') +
+        '<div class="card mt-2" role="status"><div class="flex-between"><h2 class="section-title">' + esc(I.t('subscriptionH')) + '</h2>' +
+          subBadge(d.subscription) + '</div>' + subBody(d.subscription) +
         '</div>' +
         '<h2 class="section-title mt-2">' + esc(I.t('pendingOrdersH')) + '</h2><div id="dash-pending"></div>';
 
       document.getElementById('goto-settings').addEventListener('click', () => switchTab('settings'));
+      const gotoMenu = document.getElementById('goto-menu');
+      if (gotoMenu) gotoMenu.addEventListener('click', () => switchTab('menu'));
 
       const list = document.getElementById('dash-pending');
       const { orders } = await api.get('/api/admin/orders?status=pending&limit=10');
@@ -197,6 +253,20 @@
       return openNow ? I.t('openAccepting') : I.t('openOutsideHours');
     }
     return I.t('closedNoOrders');
+  }
+
+  /* Subscription card copy (spec 014): human-readable states, never jargon. */
+  function subBadge(sub) {
+    const on = sub && sub.active;
+    const label = !sub ? I.t('subActive') : I.t({ trial: 'subTrial', active: 'subActive', grace: 'subGrace', expired: 'subExpired', cancelled: 'subCancelled', suspended: 'subSuspended' }[sub.state] || 'subActive');
+    return '<span class="badge ' + (on ? 'badge-open' : 'badge-closed') + '">' + esc(label) + '</span>';
+  }
+
+  function subBody(sub) {
+    if (!sub) return '<p class="muted small mt-1">' + esc(I.t('subPrice')) + '</p>';
+    const plan = sub.plan ? esc(sub.plan.name) : '';
+    const vars = { n: sub.daysLeft, date: sub.periodEndsAt ? fmtDateTime(sub.periodEndsAt) : '', plan };
+    return '<p class="muted small mt-1">' + esc(I.t(sub.messageKey || 'sub_active_until', vars)) + '</p>';
   }
 
   /* ----------------------------- orders ------------------------------ */
@@ -1072,6 +1142,14 @@
         api.get('/api/admin/delivery-groups'),
       ]);
       const s = res.settings;
+      // Capability visibility (spec 013 US4): delivery-companies controls are
+      // disabled with guidance when the delivery capability is off.
+      // Enforcement stays server-side (requireCapability).
+      let deliveryCap = true;
+      try {
+        const caps = await api.get('/api/onboarding/capabilities');
+        deliveryCap = !caps.capabilities || caps.capabilities.delivery !== false;
+      } catch (_) { /* readers without a tenant keep full UI; server still gates */ }
 
       zone.innerHTML =
         '<h1 class="section-title">' + esc(I.t('settingsTab')) + '</h1>' +
@@ -1138,11 +1216,12 @@
         '</section>' +
 
         '<section class="card"><h2>' + esc(I.t('deliveryGroupsT')) + '</h2>' +
+          (deliveryCap ? '' : '<p class="notice notice-error">' + esc(I.t('capDeliveryOff')) + '</p>') +
           (dgRes.groups.length
             ? '<p class="hint muted small mb-1">' + esc(I.t('chooseGroupsHint')) + '</p>' +
               '<div class="table-wrap"><table class="data"><tbody>' +
               dgRes.groups.map((g) =>
-                '<tr><td><div class="checkbox-line"><input type="checkbox" id="dg-' + esc(g.id) + '"' + (g.selected ? ' checked' : '') + '>' +
+                '<tr><td><div class="checkbox-line"><input type="checkbox" id="dg-' + esc(g.id) + '"' + (g.selected ? ' checked' : '') + (deliveryCap ? '' : ' disabled') + '>' +
                 '<label for="dg-' + esc(g.id) + '">' + esc(g.name) +
                 (g.phone ? '<span class="muted"> &middot; ' + esc(g.phone) + '</span>' : '') + '</label></div></td></tr>'
               ).join('') +

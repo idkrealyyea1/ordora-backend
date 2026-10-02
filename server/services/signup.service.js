@@ -69,6 +69,20 @@ async function signup({ email, username, password, businessName, businessType, s
       );
     }
 
+    // Trial subscription in the same transaction: identity first, then the
+    // commercial record — never an orphan either way. UNIQUE blocks doubles.
+    const planRes = await client.query(`SELECT id FROM plans WHERE key = 'standard'`);
+    if (planRes.rows[0]) {
+      const now = new Date().toISOString();
+      await client.query(
+        `INSERT INTO subscriptions
+           (restaurant_id, plan_id, status, trial_started_at,
+            current_period_start, current_period_end, grace_until)
+         VALUES ($1, $2, 'trial', $3, $3, $4, ($4::timestamptz + INTERVAL '7 days'))`,
+        [restaurant.id, planRes.rows[0].id, now, trialEndsAt]
+      );
+    }
+
     let userRow;
     try {
       const { rows } = await client.query(

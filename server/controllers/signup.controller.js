@@ -9,6 +9,7 @@
 
 const signupService = require('../services/signup.service');
 const restaurants = require('../services/restaurants.service');
+const businessTypes = require('../services/business-types.service');
 const { forbidden } = require('../utils/errors');
 const { asyncHandler } = require('../utils/errors');
 const { withSlugSuffix } = require('../utils/checks');
@@ -60,4 +61,5 @@ async function slugAvailability(req, res) {
 module.exports = {
   signup: asyncHandler(signup),
   slugAvailability: asyncHandler(slugAvailability),
+  businessTypes: (req, res) => res.json({ types: businessTypes.CHOOSER }),
 };

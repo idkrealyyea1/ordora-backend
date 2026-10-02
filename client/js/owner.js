@@ -359,7 +359,7 @@
             '<tr>' +
               '<td><strong>' + esc(r.name) + '</strong>' +
                 ((r.businessType && r.businessType !== 'restaurant')
-                  ? '<div class="small muted">' + esc(r.businessType) + '</div>'
+                  ? '<div class="small muted">' + esc(bizLabel(r.businessType)) + '</div>'
                   : '') +
               '</td>' +
               '<td class="small muted">/' + esc(r.slug) + '</td>' +
@@ -503,6 +503,16 @@
     });
   }
 
+  /* Friendly business-type label (spec 013): never show raw snake_case. */
+  function bizLabel(t) {
+    const map = {
+      restaurant: 'bt_restaurant', cafe: 'bt_cafe', dessert_shop: 'bt_dessert', bakery: 'bt_bakery',
+      cake_business: 'bt_cake', home_kitchen: 'bt_home', home_food_business: 'bt_home',
+      cloud_kitchen: 'bt_cloud', small_food_business: 'bt_other',
+    };
+    return map[t] ? I.t(map[t]) : t;
+  }
+
   function editModal(r) {
     openModal(
       '<div class="modal-head"><h2>' + I.t('mEdit') + ' ' + esc(r.name) + '</h2><button type="button" class="modal-close">&times;</button></div>' +
@@ -511,7 +521,7 @@
         '<div class="field"><label for="ed-slug">' + I.t('mSlug2') + '</label><input id="ed-slug" maxlength="63" value="' + esc(r.slug) + '" required></div>' +
         '<div class="field"><label for="ed-max">' + I.t('mMaxItems') + '</label><input id="ed-max" type="number" min="1" max="10000" value="' + r.maxMenuItems + '" required></div>' +
         '<div class="field"><label for="ed-type">' + I.t('mBizType') + '</label><select id="ed-type">' +
-          ['restaurant', 'cafe', 'dessert_shop', 'bakery', 'cake_business', 'home_kitchen', 'home_food_business', 'cloud_kitchen', 'small_food_business'].map((v) => '<option value="' + v + '"' + ((r.businessType || 'restaurant') === v ? ' selected' : '') + '>' + v + '</option>').join('') +
+          ['restaurant', 'cafe', 'dessert_shop', 'bakery', 'cake_business', 'home_kitchen', 'home_food_business', 'cloud_kitchen', 'small_food_business'].map((v) => '<option value="' + v + '"' + ((r.businessType || 'restaurant') === v ? ' selected' : '') + '>' + esc(bizLabel(v)) + '</option>').join('') +
         '</select></div>' +
         '<button type="submit" class="btn btn-block">' + I.t('mSave') + '</button>' +
       '</form>'
@@ -563,9 +573,64 @@
           '<button type="submit" class="btn btn-outline btn-block mt-1">' + I.t('mAddAdmin') + '</button>' +
         '</form>' +
 
-        '<h3 class="section-title">' + I.t('mRecentOrders') + '</h3><div id="owner-orders" class="mb-2"><div class="empty-state small">' + I.t('mLoading') + '</div></div>'
+        '<h3 class="section-title">' + I.t('mRecentOrders') + '</h3><div id="owner-orders" class="mb-2"><div class="empty-state small">' + I.t('mLoading') + '</div></div>' +
+
+        '<h3 class="section-title">' + I.t('mSubscription') + '</h3><div id="owner-sub" class="mb-2"><div class="empty-state small">' + I.t('mLoading') + '</div></div>'
       );
       document.querySelector('.modal-close').addEventListener('click', closeModal);
+
+      // Subscription status + minimal actions (Task 14: no billing console).
+      api.get('/api/owner/restaurants/' + id + '/subscription').then((sub) => {
+        const zone = document.getElementById('owner-sub');
+        if (!zone) return;
+        const line = (k, v) => '<div class="rank-row"><span>' + esc(I.t(k)) + '</span><strong>' + esc(String(v || '—')) + '</strong></div>';
+        zone.innerHTML =
+          line('mSubState', sub.state) + line('mSubPlan', sub.plan ? sub.plan.name : '—') +
+          line('mSubEnds', sub.periodEndsAt ? sub.periodEndsAt.slice(0, 10) : I.t('mSubOpen')) +
+          '<div class="form-row form-row-2 mt-1">' +
+            '<input id="sub-days" type="number" min="1" max="3650" value="30" aria-label="' + esc(I.t('mSubDays')) + '">' +
+            '<input id="sub-reason" maxlength="300" placeholder="' + esc(I.t('mSubReason')) + '">' +
+          '</div>' +
+          '<div class="mt-1">' +
+            '<button type="button" class="btn btn-outline btn-sm" data-sub="extend">' + I.t('mSubExtend') + '</button> ' +
+            '<button type="button" class="btn btn-outline btn-sm" data-sub="reactivate">' + I.t('mSubReactivate') + '</button> ' +
+            '<button type="button" class="btn btn-outline btn-sm" data-sub="cancel">' + I.t('mSubCancelEnd') + '</button> ' +
+            '<button type="button" class="btn btn-danger btn-sm" data-sub="suspend">' + I.t('mSubSuspend') + '</button>' +
+          '</div>';
+        const reason = () => document.getElementById('sub-reason').value.trim();
+        const days = () => Math.max(1, Math.min(3650, Number(document.getElementById('sub-days').value) || 30));
+        zone.querySelectorAll('[data-sub]').forEach((b) => b.addEventListener('click', () => {
+          const a = b.dataset.sub;
+          const base = '/api/owner/restaurants/' + id + '/subscription/';
+          const calls = {
+            extend: () => api.post(base + 'extend', { extendDays: days(), reason: reason() }),
+            reactivate: () => api.post(base + 'reactivate', { reason: reason() }),
+            cancel: () => api.post(base + 'cancel', { effective: 'period_end', reason: reason() }),
+            suspend: () => {
+              if (!reason()) { toast(I.t('mSubReasonReq'), 'error'); return Promise.reject(new Error(I.t('mSubReasonReq'))); }
+              return api.post(base + 'suspend', { reason: reason() });
+            },
+          };
+          act(() => calls[a]().then(() => manageModal(id)));
+        }));
+      }).catch(() => {
+        const zone = document.getElementById('owner-sub');
+        if (zone) zone.innerHTML = '<p class="muted small">—</p>';
+      });
+
+      // Audit trail (newest first, Task 14).
+      api.get('/api/owner/restaurants/' + id + '/subscription/events').then((res) => {
+        const zone = document.getElementById('owner-sub');
+        if (!zone || !res.events.length) return;
+        const list = document.createElement('div');
+        list.className = 'mt-1';
+        list.innerHTML = '<p class="muted small">' + esc(I.t('mSubHistory')) + '</p>' +
+          res.events.slice(0, 5).map((e) =>
+            '<div class="rank-row"><span>' + esc(e.action) + (e.reason ? ' · ' + esc(e.reason) : '') + '</span>' +
+            '<span class="muted small">' + esc(String(e.at || '').slice(0, 10)) + '</span></div>'
+          ).join('');
+        zone.appendChild(list);
+      }).catch(() => {});
 
       // Recent orders inside the modal
       api.get('/api/owner/restaurants/' + id + '/orders?limit=5').then((res) => {

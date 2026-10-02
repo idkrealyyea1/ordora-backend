@@ -39,6 +39,20 @@ async function createRestaurant({ name, slug, maxMenuItems, subscriptionEndsAt, 
         [restaurant.id, day]
       );
     }
+    // Every tenant gets exactly one subscription row (Task 14): admin and
+    // demo creations land here too, so no path can leave a row-less business.
+    const planRes = await client.query(`SELECT id FROM plans WHERE key = 'standard'`);
+    if (planRes.rows[0]) {
+      const end = subscriptionEndsAt || null;
+      await client.query(
+        `INSERT INTO subscriptions
+           (restaurant_id, plan_id, status, current_period_start, current_period_end, grace_until)
+         VALUES ($1, $2, 'active', now(), $3,
+           CASE WHEN $3 IS NULL THEN NULL ELSE ($3::timestamptz + INTERVAL '7 days') END)
+         ON CONFLICT (restaurant_id) DO NOTHING`,
+        [restaurant.id, planRes.rows[0].id, end]
+      );
+    }
     return restaurant;
   });
 }
@@ -94,15 +108,39 @@ async function getById(id) {
   return rows[0] || null;
 }
 
-/** Subscription status for the admin panel. NULL / future date = active. */
+/**
+ * Subscription status for gates and panels. Derivation-aware (Task 14):
+ * joins the subscription row and resolves trial/active/grace/expired through
+ * server time; stored suspended/cancelled override. Falls back to the legacy
+ * clock when no subscription row exists. `active` stays true through grace
+ * (recovery-first); `endsAt` is the instant gates should enforce.
+ */
 async function getSubscription(restaurantId) {
   const { rows } = await query(
-    'SELECT subscription_ends_at AS "endsAt" FROM restaurants WHERE id = $1',
+    `SELECT r.subscription_ends_at AS "endsAt", s.status, s.current_period_end,
+            s.grace_until, s.cancel_effective_at
+     FROM restaurants r LEFT JOIN subscriptions s ON s.restaurant_id = r.id
+     WHERE r.id = $1`,
     [restaurantId]
   );
-  const endsAt = rows[0] ? rows[0].endsAt : null;
-  const active = !endsAt || new Date(endsAt).getTime() > Date.now();
-  return { active, endsAt };
+  if (!rows[0]) return { active: false, endsAt: null, state: 'expired' };
+  if (!rows[0].status) {
+    const endsAt = rows[0].endsAt;
+    const active = !endsAt || new Date(endsAt).getTime() > Date.now();
+    return { active, endsAt, state: active ? 'active' : 'expired' };
+  }
+  const { derive } = require('./subscriptions.service');
+  const eff = derive(
+    {
+      status: rows[0].status,
+      current_period_end: rows[0].current_period_end,
+      grace_until: rows[0].grace_until,
+      cancel_effective_at: rows[0].cancel_effective_at,
+    },
+    null
+  );
+  const accessStates = ['trial', 'active', 'grace'];
+  return { active: accessStates.includes(eff.state), endsAt: eff.accessEndsAt, state: eff.state };
 }
 
 async function getBySlug(slug) {
@@ -126,13 +164,19 @@ async function getHours(restaurantId) {
 /**
  * Public storefront payload: everything a customer's browser may see.
  * Never exposes owner-only fields (max_menu_items, is_active internals).
+ * Task 14 (clarified): lapsed access degrades the storefront instead of
+ * deleting it — expired/cancelled-effective stores render the menu with
+ * ordering disabled; suspended stores render the controlled notice.
+ * Only platform-deactivated (`is_active = false`) stores 404.
  */
 async function getPublicView(slug) {
   const restaurant = await getBySlug(slug);
   if (!restaurant || !restaurant.is_active) return null;
-  // 7-day trial: public page also expires — ponytail: reuse getSubscription
   const sub = await getSubscription(restaurant.id);
-  if (!sub.active) return null;
+  const orderingBlocked = !sub.active;
+  const noticeKey = !sub.active
+    ? (sub.state === 'suspended' ? 'sub_store_suspended' : 'sub_store_expired')
+    : null;
 
   const settings = await getSettings(restaurant.id);
   const hours = await getHours(restaurant.id);
@@ -170,6 +214,8 @@ async function getPublicView(slug) {
     name: restaurant.name,
     slug: restaurant.slug,
     businessType: restaurant.business_type || 'restaurant',
+    orderingBlocked,
+    noticeKey,
     status: restaurant.is_active ? restaurant.status : 'closed',
     openNow,
     deliveryGroups,
@@ -222,8 +268,12 @@ async function listForOwner({ search, status, limit, offset }) {
   params.push(limit, offset);
   const { rows } = await query(
     `SELECT r.id, r.slug, r.name, r.status, r.is_active, r.max_menu_items, r.created_at,
-            r.business_type, COALESCE(items.n, 0)::int AS item_count
+            r.business_type, r.subscription_ends_at,
+            s.status AS sub_status, s.current_period_end AS sub_ends_at,
+            p.key AS plan_key, COALESCE(items.n, 0)::int AS item_count
      FROM restaurants r
+     LEFT JOIN subscriptions s ON s.restaurant_id = r.id
+     LEFT JOIN plans p ON p.id = s.plan_id
      LEFT JOIN (SELECT restaurant_id, COUNT(*) AS n FROM menu_items GROUP BY restaurant_id) items
        ON items.restaurant_id = r.id
      WHERE ${where}
@@ -325,7 +375,12 @@ async function listPublicDirectory() {
                  WHERE m.restaurant_id = r.id AND m.is_available) AS item_count
        FROM restaurants r
        LEFT JOIN restaurant_settings s ON s.restaurant_id = r.id
+       LEFT JOIN subscriptions sub ON sub.restaurant_id = r.id
        WHERE r.is_active AND (r.subscription_ends_at IS NULL OR r.subscription_ends_at > now())
+         AND (sub.status IS NULL OR sub.status IN ('trial', 'active', 'grace')
+           OR (sub.status = 'cancelled'
+             AND COALESCE(sub.cancel_effective_at, sub.current_period_end, now()) > now()))
+         AND (sub.status IS NULL OR sub.status <> 'suspended')
        ORDER BY r.created_at ASC`
     )
   ).rows;

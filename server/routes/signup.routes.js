@@ -8,5 +8,6 @@ const router = express.Router();
 
 router.post('/signup', authLimiter, signup.signup);
 router.get('/signup/slug-availability', authLimiter, signup.slugAvailability);
+router.get('/business-types', signup.businessTypes);
 
 module.exports = router;
