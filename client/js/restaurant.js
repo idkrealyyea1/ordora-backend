@@ -32,6 +32,9 @@
       keepBrowsing: 'مواصلة التصفح', cartEmpty: 'سلتك فارغة', cartEmptyHint: 'تصفح القائمة وأضف ما يعجبك.',
       placedHead: 'تم استلام طلبك', showCode: 'أظهر هذا الرمز عند الاستلام أو تتبع طلبك به:',
       trackMyOrder: 'تتبع طلبي', done: 'حسنًا', linkCopied: 'تم نسخ رابط المنيو',
+      reorderAdjusted: 'بعض الأصناف تغيّرت أو لم تعد متوفرة — راجع سلتك قبل التأكيد.',
+      orderSummary: 'ملخص الطلب',
+      nextSteps: 'احتفظ بهذا الرمز. سنبدأ بتجهيز طلبك فورًا ويمكنك تتبع حالته في أي وقت.',
       enterNameAndWa: 'الرجاء إدخال الاسم ورقم الواتساب', addrRequired: 'الرجاء إدخال عنوان التوصيل',
       noWA: 'الواتساب غير متوفر لهذا المطعم', closedNotice: 'المطعم مغلق حاليًا — يمكنك التصفح وإتمام الطلب عند الافتتاح.',
       noMatch: 'لا توجد أصناف مطابقة.', menuEmpty: 'لا توجد أصناف متاحة حاليًا.',
@@ -56,6 +59,9 @@
       keepBrowsing: 'Keep browsing', cartEmpty: 'Your cart is empty', cartEmptyHint: 'Browse the menu and add what you like.',
       placedHead: 'Order received', showCode: 'Show this code at pickup or use it to track your order:',
       trackMyOrder: 'Track my order', done: 'Done', linkCopied: 'Menu link copied',
+      reorderAdjusted: 'Some items changed or are no longer available — review your cart before confirming.',
+      orderSummary: 'Order summary',
+      nextSteps: 'Keep this code. We will start preparing your order right away and you can track its status anytime.',
       enterNameAndWa: 'Please enter your name and WhatsApp number', addrRequired: 'Please enter the delivery address',
       noWA: 'WhatsApp is not available for this restaurant', closedNotice: 'The restaurant is currently closed — feel free to browse.',
       noMatch: 'No dishes match your search.', menuEmpty: 'No items available right now.',
@@ -623,16 +629,58 @@
 
   function renderSuccess(order) {
     const code = order.code || '';
-    const total = order.total_cents ?? order.totalCents ?? 0;
+    paintSuccess(order, null);
+    // Enrich with the frozen server projection (lines, options, preorder
+    // notes, currency). Failure keeps the minimal confirmation above.
+    api.get('/api/orders/track/' + encodeURIComponent(code)).then(
+      (d) => { if (d && d.order) paintSuccess(order, d.order); },
+      () => {}
+    );
+  }
+
+  function paintSuccess(order, full) {
+    const code = order.code || '';
+    const currency = (full && full.currency) || order.currency || (view.settings && view.settings.currency) || 'USD';
+    const sub = full ? full.subtotal_cents : order.subtotalCents;
+    const fee = full ? full.delivery_fee_cents : order.deliveryFeeCents;
+    const total = full ? full.total_cents : (order.total_cents ?? order.totalCents ?? 0);
+    const type = full ? full.order_type : orderType;
+    const when = full ? full.created_at : order.createdAt;
+    const lines = full
+      ? full.items.map((it) =>
+        '<div class="total-row"><span>' + esc(it.quantity) + ' &times; ' + esc(it.item_name) +
+        (((it.options || []).length)
+          ? '<br><small>' + esc(it.options.map((o) => o.choice_name + (o.quantity > 1 ? ' ×' + o.quantity : '')).join(', ')) + '</small>'
+          : '') +
+        (it.is_preorder
+          ? '<br><small>' + esc(t().preorderBadge) + (it.preorder_note ? ': ' + esc(it.preorder_note) : '') + '</small>'
+          : '') +
+        '</span><span>' + esc(fmtMoney(it.line_total_cents, currency)) + '</span></div>'
+      ).join('')
+      : '';
+    let whenLine = '';
+    try {
+      if (when) whenLine = '<p class="muted small mb-0">' + esc(new Date(when).toLocaleString(lang === 'ar' ? 'ar' : 'en')) + '</p>';
+    } catch (_) { /* cosmetic only */ }
     $overlay().innerHTML = '<div class="cart-overlay"><section class="cart-modal">' +
       '<div class="cart-title"><div><h2>' + esc(t().placedHead) + '</h2></div>' +
       '<button class="cart-close" data-close>×</button></div>' +
       '<p style="color:rgba(32,61,58,.65);font-size:13px">' + esc(t().showCode) + '</p>' +
-      '<div class="success-code">' + esc(code) + '</div>' +
-      '<p class="success-total">' + esc(t().total) + ' <strong>' + esc(money(total)) + '</strong></p>' +
-      '<a class="co-submit" style="text-decoration:none" href="/track.html?code=' + encodeURIComponent(code) + '">' + esc(t().trackMyOrder) + '</a>' +
+      '<div class="success-code">' + esc(code) + '</div>' + whenLine +
+      '<p><span class="badge">' + esc(type === 'delivery' ? t().delivery : t().pickup) + '</span>' +
+      (full && full.items.some((it) => it.is_preorder) ? ' <span class="preorder-tag">' + esc(t().preorderBadge) + '</span>' : '') + '</p>' +
+      (lines ? '<h3 class="section-title">' + esc(t().orderSummary) + '</h3>' + lines : '') +
+      (full && type === 'delivery'
+        ? '<div class="total-row"><span>' + esc(t().deliveryFee) + '</span><span>' + esc(fmtMoney(full.delivery_fee_cents, currency)) + '</span></div>'
+        : (sub !== undefined && fee !== undefined && type === 'delivery'
+          ? '<div class="total-row"><span>' + esc(t().deliveryFee) + '</span><span>' + esc(fmtMoney(fee, currency)) + '</span></div>'
+          : '')) +
+      '<p class="success-total">' + esc(t().total) + ' <strong>' + esc(fmtMoney(total, currency)) + '</strong></p>' +
+      '<p style="color:rgba(32,61,58,.65);font-size:13px">' + esc(t().nextSteps) + '</p>' +
+      '<a class="co-submit" style="text-decoration:none" href="/track?code=' + encodeURIComponent(code) + '">' + esc(t().trackMyOrder) + '</a>' +
       '<button class="co-ghost" data-close>' + esc(t().done) + '</button></section></div>';
     $overlay().querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => { sent = false; closeOverlay(); }));
+    focusModal($overlay());
   }
 
   /* ---------------------------- booking ---------------------------- */
@@ -706,14 +754,65 @@
     document.title = (lang === 'en' && view.settings.nameEn) ? view.settings.nameEn : view.name;
 
     const reorderRaw = qsParam('reorder');
-    if (reorderRaw) {
+    const reorderFrom = qsParam('reorderFrom');
+    if (reorderRaw || reorderFrom) {
+      // Rebuilds from LIVE definitions: unknown/unavailable items and
+      // renamed/removed/unavailable options are dropped with notice —
+      // stale prices are never reapplied (server reprices at checkout).
+      const apply = (lines) => {
+        let dropped = 0;
+        for (const line of lines) {
+          const id = String(line.id).trim();
+          const qty = Math.max(1, Math.min(Number(line.qty), 99) || 1);
+          const item = view.items.find((i) => i.id === id);
+          if (!item || !item.is_available) { dropped += 1; continue; }
+          const opts = line.options || [];
+          if (!opts.length && !(item.options || []).length) { cart[id] = qty; continue; }
+          const selections = [];
+          let ok = true;
+          for (const g of (item.options || [])) {
+            const want = opts.filter((o) =>
+              (o.group_name || '').toLowerCase() === g.name.toLowerCase());
+            const choices = [];
+            for (const w of want) {
+              const c = (g.choices || []).find((x) =>
+                x.is_available && x.name.toLowerCase() === (w.choice_name || '').toLowerCase());
+              if (!c) continue;
+              if (choices.length >= g.max_picks) break;
+              choices.push({ choiceId: c.id, quantity: Math.max(1, Math.min(Number(w.quantity) || 1, c.max_quantity || 99)) });
+            }
+            if (choices.length < g.min_picks) { ok = false; break; }
+            if (choices.length) selections.push({ groupId: g.id, choices });
+          }
+          if (!ok) { dropped += 1; continue; }
+          const key = id + '#' + selections
+            .map((s) => s.groupId + ':' + s.choices.map((c) => c.choiceId + 'x' + c.quantity).join(',')).join(';');
+          cart[key] = { qty, selections };
+        }
+        return dropped;
+      };
       try {
-        reorderRaw.split(',').forEach((p) => {
-          const [id, q] = p.split(':');
-          const qty = Math.max(1, Math.min(Number(q), 99) || 1);
-          if (view.items.some((i) => i.id === String(id).trim())) cart[String(id).trim()] = qty;
-        });
+        let dropped = 0;
+        if (reorderFrom && /^[A-Za-z0-9]{6,12}$/.test(reorderFrom)) {
+          try {
+            const d = await api.get('/api/orders/track/' + encodeURIComponent(reorderFrom.toUpperCase()));
+            dropped = apply((d.order.items || []).map((it) => ({
+              id: it.menu_item_id, qty: it.quantity, options: it.options || [],
+            })));
+          } catch (_) {
+            dropped = apply((reorderRaw || '').split(',').filter(Boolean).map((p) => {
+              const [id, q] = p.split(':');
+              return { id, qty: q, options: [] };
+            }));
+          }
+        } else if (reorderRaw) {
+          dropped = apply(reorderRaw.split(',').map((p) => {
+            const [id, q] = p.split(':');
+            return { id, qty: q, options: [] };
+          }));
+        }
         saveCart();
+        if (dropped) toast(t().reorderAdjusted, 'error');
       } catch (_) { /* ignore malformed reorder param */ }
     }
 

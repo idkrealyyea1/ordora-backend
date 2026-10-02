@@ -26,6 +26,14 @@
     errorBox.classList.remove('hidden');
   }
 
+  function friendlyError(err) {
+    if (!navigator.onLine) return I.t('offlineTrack');
+    const msg = (err && err.message) || '';
+    // Uniform server 404 carries no detail; add a next-step hint instead.
+    if (/not found|No order found/i.test(msg)) return msg + ' ' + I.t('invalidCodeHint');
+    return msg;
+  }
+
   async function loadOrder(code) {
     try {
       const data = await api.get('/api/orders/track/' + encodeURIComponent(code));
@@ -33,7 +41,7 @@
     } catch (err) {
       stopPolling();
       showLookup();
-      showError(err.message);
+      showError(friendlyError(err));
     }
   }
 
@@ -97,7 +105,8 @@
   function renderActions(order) {
     const zone = document.getElementById('order-actions');
     const reorder = '/restaurant/' + encodeURIComponent(order.restaurant_slug) + '?reorder=' +
-      encodeURIComponent(order.items.map((it) => it.menu_item_id + ':' + it.quantity).join(','));
+      encodeURIComponent(order.items.map((it) => it.menu_item_id + ':' + it.quantity).join(',')) +
+      '&reorderFrom=' + encodeURIComponent(order.code);
 
     const btns = [];
     if (canCancel(order)) {
@@ -165,8 +174,19 @@
 
   document.getElementById('reset-btn').addEventListener('click', () => {
     stopPolling();
+    currentCode = null;
+    lastOrder = null;
     history.replaceState(null, '', '/track');
     showLookup();
+  });
+
+  document.getElementById('refresh-btn').addEventListener('click', () => {
+    if (currentCode) loadOrder(currentCode);
+  });
+
+  window.addEventListener('offline', () => showError(I.t('offlineTrack')));
+  window.addEventListener('online', () => {
+    if (currentCode) loadOrder(currentCode).then(() => startPolling(currentCode));
   });
 
   // Deep link support: /track?code=XXXX

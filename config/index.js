@@ -105,6 +105,14 @@ const config = Object.freeze({
   // How long a customer may cancel their own order after placing it.
   customerCancelGraceMs: intEnv('CANCEL_GRACE_MINUTES', 15) * 60 * 1000,
 
+  // Browser Web Push (owner new-order alerts). Single platform-wide VAPID
+  // keypair; private key stays server-side and is never logged or exposed.
+  // Push stays disabled unless explicitly enabled with keys configured.
+  vapidPublicKey: (process.env.VAPID_PUBLIC_KEY || '').trim(),
+  vapidPrivateKey: (process.env.VAPID_PRIVATE_KEY || '').trim(),
+  vapidSubject: (process.env.VAPID_SUBJECT || '').trim(),
+  pushEnabled: process.env.PUSH_ENABLED === '1' && Boolean((process.env.VAPID_PUBLIC_KEY || '').trim()),
+
   rateLimits: {
     global: { windowMs: intEnv('RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000), max: intEnv('RATE_LIMIT_MAX', 300) },
     auth: { windowMs: intEnv('AUTH_RATE_WINDOW_MS', 15 * 60 * 1000), max: intEnv('AUTH_RATE_MAX', 10) },

@@ -113,12 +113,24 @@ function assertTime(value, field) {
   return value.trim();
 }
 
+/**
+ * Numeric-suffix slug variant: attempt 0 → base, then base-2, base-3, …
+ * Kept within the 63-char slug limit by trimming the base. The DB UNIQUE
+ * constraint stays the final arbiter; callers loop with slugExists().
+ */
+function withSlugSuffix(base, attempt) {
+  if (!attempt) return base;
+  const suffix = `-${attempt + 1}`;
+  return `${base.slice(0, 63 - suffix.length)}${suffix}`;
+}
+
 module.exports = {
   cleanText,
   requireText,
   cleanPhone,
   normalizeHexColor,
   normalizeSlug,
+  withSlugSuffix,
   toIntInRange,
   toBool,
   assertUuid,

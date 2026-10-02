@@ -5,7 +5,7 @@
    - Static assets: cache-first.
    - API + uploads: never cached (must stay live/fresh). */
 
-const CACHE = 'restaurants-v20';
+const CACHE = 'restaurants-v21';
 const SHELL = [
   '/',
   '/css/style.css',
@@ -87,4 +87,44 @@ self.addEventListener('fetch', (event) => {
       )
     );
   }
+});
+
+/* Owner new-order push (additive: caching behavior above is untouched). */
+
+self.addEventListener('push', (event) => {
+  let data = null;
+  try {
+    data = event.data ? event.data.json() : null;
+  } catch (_) {
+    data = null;
+  }
+  const title = (data && data.title) || 'طلب جديد · New order';
+  const body = (data && data.body) || '';
+  const tag = (data && data.tag) || 'new-order';
+  const url = (data && data.url) || '/admin.html#orders';
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      tag,
+      icon: '/icons/icon.svg',
+      badge: '/icons/icon.svg',
+      data: { url },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/admin.html#orders';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      for (const w of windows) {
+        if (w.url.includes('/admin.html')) {
+          w.navigate(url);
+          return w.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
 });

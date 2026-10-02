@@ -2,7 +2,7 @@
 
 const express = require('express');
 const admin = require('../controllers/admin.controller');
-const { requireAuth, requireRestaurantAdmin, forbidStaffDelete } = require('../middleware/auth');
+const { requireAuth, requireRestaurantAdmin, forbidStaffDelete, forbidStaff } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -19,6 +19,12 @@ router.get('/qr', admin.qrCode);
 
 // Live new-order notifications (Server-Sent Events)
 router.get('/events', admin.events);
+
+// Browser Web Push subscriptions (admins only; staff refused)
+router.get('/push-public-key', forbidStaff, admin.pushPublicKey);
+router.get('/push-subscriptions', forbidStaff, admin.listPushSubscriptions);
+router.post('/push-subscriptions', forbidStaff, admin.createPushSubscription);
+router.delete('/push-subscriptions/:id', forbidStaff, admin.deletePushSubscription);
 
 // Categories
 router.get('/categories', admin.listCategories);

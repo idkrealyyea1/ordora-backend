@@ -87,6 +87,14 @@ function forbidStaffDelete(req, res, next) {
   next();
 }
 
+/** Staff role is excluded from owner alert surfaces (e.g. push subscriptions). */
+function forbidStaff(req, res, next) {
+  if (req.user && req.user.role === 'staff') {
+    return next(forbidden('STAFF_NO_PUSH', 'Staff accounts cannot manage notifications'));
+  }
+  next();
+}
+
 function requireDelivery(req, res, next) {
   if (!req.user) return next(unauthorized());
   if (req.user.role !== 'delivery') return next(forbidden());
@@ -103,4 +111,4 @@ function tenantIdOf(req) {
   return req.user.restaurant_id;
 }
 
-module.exports = { attachUser, requireAuth, requireOwner, requireOwnerOrStaff, requireRestaurantAdmin, requireDelivery, forbidStaffDelete, tenantIdOf };
+module.exports = { attachUser, requireAuth, requireOwner, requireOwnerOrStaff, requireRestaurantAdmin, requireDelivery, forbidStaffDelete, forbidStaff, tenantIdOf };

@@ -19,6 +19,8 @@ const { errorHandler, notFoundHandler, notFound, asyncHandler } = require('./uti
 const files = require('./services/files.service');
 
 const authRoutes = require('./routes/auth.routes');
+const signupRoutes = require('./routes/signup.routes');
+const onboardingRoutes = require('./routes/onboarding.routes');
 const publicRoutes = require('./routes/public.routes');
 const adminRoutes = require('./routes/admin.routes');
 const ownerRoutes = require('./routes/owner.routes');
@@ -146,6 +148,8 @@ function buildApp() {
   /* -------------------------------- API -------------------------------- */
   app.use('/api', globalLimiter);
   app.use('/api/auth', authRoutes);
+  app.use('/api', signupRoutes);
+  app.use('/api/onboarding', onboardingRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/owner', ownerRoutes);
   app.use('/api/owner/leads', leadsRoutes);

@@ -238,15 +238,22 @@
       ? '<div class="order-actions">' + actions + deleteBtn + '</div>'
       : '';
 
+    const isNew = o.status === 'pending' && highlightCode && o.code === highlightCode;
+    const typeBadge = '<span class="badge">' + esc(o.order_type === 'delivery' ? I.t('delivery') : I.t('pickup')) + '</span>';
+    const preorderBadge = o.has_preorder
+      ? ' <span class="badge badge-popular">' + esc(I.t('preorderBadge')) + '</span>'
+      : '';
+
     return (
-      '<article class="card order-card" id="order-' + esc(o.id) + '">' +
+      '<article class="card order-card' + (isNew ? ' order-new' : '') + '" id="order-' + esc(o.id) + '">' +
         '<div class="order-head">' +
           '<span class="order-code">' + esc(o.code) + '</span>' +
-          '<span class="badge status-' + esc(o.status) + '">' + esc(statusLabel(o.status)) + '</span>' +
+          '<span><span class="badge status-' + esc(o.status) + '">' + esc(statusLabel(o.status)) + '</span> ' +
+          typeBadge + preorderBadge + '</span>' +
         '</div>' +
         '<div class="order-meta mt-1">' +
           esc(o.customer_name) + ' &middot; ' + esc(o.customer_whatsapp) + ' &middot; ' +
-          esc(o.order_type) + ' &middot; ' + fmtDateTime(o.created_at) +
+          fmtDateTime(o.created_at) + ' &middot; ' + esc(I.t('itemsCount', { n: o.total_units || 0 })) +
         '</div>' +
         (o.items
           ? '<ul class="order-lines small">' + lines + '</ul>' +
@@ -300,16 +307,28 @@
           const el = document.getElementById('order-' + btn.dataset.expand);
           const head = el.querySelector('.order-head');
           if (!el.querySelector('.order-lines')) {
-            head.insertAdjacentHTML('afterend',
+            const full = res.order;
+            const wa = String(full.customer_whatsapp || '').replace(/\D/g, '');
+            const contact =
+              '<div class="order-meta mt-1">' + esc(full.customer_name || '') +
+              (wa ? ' &middot; <a href="https://wa.me/' + esc(wa) + '" target="_blank" rel="noopener">' + esc(full.customer_whatsapp) + '</a>' : '') +
+              (full.customer_phone ? ' &middot; ' + esc(full.customer_phone) : '') + '</div>' +
+              (full.order_type === 'delivery' && full.customer_address
+                ? '<div class="order-meta mt-1"><strong>' + esc(I.t('addrLabel')) + '</strong> ' + esc(full.customer_address) + '</div>'
+                : '');
+            head.insertAdjacentHTML('afterend', contact +
               '<ul class="order-lines small">' +
-              res.order.items.map((it) => {
+              full.items.map((it) => {
                 const optNames = (it.options || []).map((o) => o.choice_name + (o.quantity > 1 ? ' ×' + o.quantity : '')).join(', ');
                 return '<li>' + esc(it.quantity) + ' &times; ' + esc(it.item_name) +
                   (optNames ? ' <span class="muted">(' + esc(optNames) + ')</span>' : '') +
-                  (it.is_preorder ? ' <span class="badge">' + esc(I.t('preorderBadge')) + (it.preorder_note ? ': ' + esc(it.preorder_note) : '') + '</span>' : '') +
+                  (it.is_preorder ? ' <span class="badge badge-popular">' + esc(I.t('preorderBadge')) + (it.preorder_note ? ': ' + esc(it.preorder_note) : '') + '</span>' : '') +
                   ' — ' + fmtMoney(it.line_total_cents, currency) + '</li>';
               }).join('') +
-              '</ul>');
+              '</ul>' +
+              '<div class="small">' + esc(I.t('subtotal')) + ' ' + fmtMoney(full.subtotal_cents, currency) +
+              (full.order_type === 'delivery' ? ' &middot; ' + esc(I.t('deliveryFee')) + ' ' + fmtMoney(full.delivery_fee_cents, currency) : '') +
+              ' &middot; <strong>' + esc(I.t('totalW')) + ' ' + fmtMoney(full.total_cents, currency) + '</strong></div>');
           }
           btn.remove();
         } catch (err) {
@@ -321,6 +340,7 @@
 
   let ordersFilter = '';
   let ordersPage = 1;
+  let highlightCode = null; // latest order:new code; highlighted while pending
 
   async function loadOrders() {
     const zone = document.getElementById('tab-orders');
@@ -538,7 +558,11 @@
     if (eventSource) eventSource.close();
     eventSource = new EventSource('/api/admin/events');
 
-    eventSource.addEventListener('order:new', () => {
+    eventSource.addEventListener('order:new', (e) => {
+      try {
+        const payload = JSON.parse(e.data || '{}');
+        if (payload.code) highlightCode = payload.code;
+      } catch (_) { /* toast + refresh still apply */ }
       toast(I.t('newOrderToast'), 'success');
       refreshCurrentOrdersView();
       if (!document.getElementById('tab-dashboard').classList.contains('hidden')) loadDashboard();
@@ -939,6 +963,105 @@
   ];
   const DAY_KEYS = ['day_0', 'day_1', 'day_2', 'day_3', 'day_4', 'day_5', 'day_6'];
 
+  /* --------------------- push notifications ---------------------- */
+
+  function pushSupported() {
+    return ('Notification' in window) && ('serviceWorker' in navigator) && ('PushManager' in window);
+  }
+
+  function vapidKeyToBytes(base64) {
+    const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+    const raw = atob(base64.replace(/-/g, '+').replace(/_/g, '/') + pad);
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  async function loadPushCard() {
+    const box = document.getElementById('push-card-body');
+    if (!box) return;
+    if (!pushSupported()) {
+      box.innerHTML = '<p class="muted small">' + esc(I.t('pushUnsupported')) + '</p>';
+      return;
+    }
+    let cfg;
+    try {
+      cfg = await api.get('/api/admin/push-public-key');
+    } catch (err) {
+      box.innerHTML = errorHtml(err);
+      return;
+    }
+    if (!cfg.enabled) {
+      box.innerHTML = '<p class="muted small">' + esc(I.t('pushUnavailable')) + '</p>';
+      return;
+    }
+    const perm = Notification.permission;
+    let listHtml = '';
+    try {
+      const { subscriptions } = await api.get('/api/admin/push-subscriptions');
+      listHtml = subscriptions.length
+        ? '<ul class="order-lines small">' + subscriptions.map((s) =>
+            '<li>' + esc(s.label || I.t('pushThisDevice')) + ' <span class="muted">· ' + esc(fmtDateTime(s.created_at)) + '</span> ' +
+            '<button type="button" class="btn btn-outline btn-sm" data-unpush="' + esc(s.id) + '">' + esc(I.t('pushRemove')) + '</button></li>'
+          ).join('') + '</ul>'
+        : '<p class="muted small">' + esc(I.t('pushNoDevices')) + '</p>';
+    } catch (err) {
+      box.innerHTML = errorHtml(err);
+      return;
+    }
+    box.innerHTML =
+      '<p class="muted small">' + esc(I.t('pushBenefit')) + '</p>' +
+      (perm === 'denied'
+        ? '<p class="muted small">' + esc(I.t('pushDeniedHint')) + '</p>'
+        : '<button id="push-enable-btn" type="button" class="btn btn-secondary btn-sm">' + esc(I.t('pushEnable')) + '</button>') +
+      '<div class="mt-1">' + listHtml + '</div>';
+    const enableBtn = document.getElementById('push-enable-btn');
+    if (enableBtn) {
+      enableBtn.addEventListener('click', async () => {
+        enableBtn.disabled = true;
+        try {
+          const permission = await Notification.requestPermission();
+          if (permission !== 'granted') {
+            toast(I.t('pushDeniedHint'), 'error');
+            loadPushCard();
+            return;
+          }
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: vapidKeyToBytes(cfg.publicKey),
+          });
+          await api.post('/api/admin/push-subscriptions', {
+            endpoint: sub.endpoint,
+            keys: { p256dh: sub.toJSON().keys.p256dh, auth: sub.toJSON().keys.auth },
+            label: '',
+          });
+          toast(I.t('pushSubscribed'), 'success');
+          loadPushCard();
+        } catch (err) {
+          toast(err.message, 'error');
+          enableBtn.disabled = false;
+        }
+      });
+    }
+    box.querySelectorAll('[data-unpush]').forEach((b) => b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        await api.del('/api/admin/push-subscriptions/' + b.dataset.unpush);
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) await sub.unsubscribe();
+        } catch (_) { /* server row is the source of truth */ }
+        toast(I.t('pushRemoved'), 'success');
+        loadPushCard();
+      } catch (err) {
+        toast(err.message, 'error');
+        b.disabled = false;
+      }
+    }));
+  }
+
   async function loadSettings() {
     const zone = document.getElementById('tab-settings');
     zone.innerHTML = '<div class="empty-state">' + esc(I.t('loading')) + '</div>';
@@ -952,6 +1075,10 @@
 
       zone.innerHTML =
         '<h1 class="section-title">' + esc(I.t('settingsTab')) + '</h1>' +
+
+        '<section class="card"><h2>' + esc(I.t('pushTitle')) + '</h2>' +
+          '<div id="push-card-body"><p class="muted small">' + esc(I.t('loading')) + '</p></div>' +
+        '</section>' +
 
         '<section class="card"><h2>' + esc(I.t('profileS')) + '</h2>' +
           '<div class="field"><label for="st-desc">' + esc(I.t('descL2')) + '</label><textarea id="st-desc" maxlength="500">' + esc(s.description) + '</textarea></div>' +
@@ -1040,6 +1167,7 @@
         '<button id="save-settings-btn" type="button" class="btn btn-block mb-3">' + esc(I.t('saveAll')) + '</button>';
 
       document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
+      loadPushCard();
 
       const c1 = document.getElementById('st-color1');
       const c2 = document.getElementById('st-color2');
@@ -1196,28 +1324,67 @@
     return cols.join('');
   }
 
+  let analyticsPeriod = { preset: '7d' };
+
   async function loadAnalytics() {
     const zone = document.getElementById('tab-analytics');
     zone.innerHTML = '<div class="empty-state">' + esc(I.t('loading')) + '</div>';
     try {
-      const days = Number(document.getElementById('an-days')?.value || 7);
-      const a = await api.get('/api/admin/analytics?days=' + days);
+      const q = analyticsPeriod.preset
+        ? '?preset=' + encodeURIComponent(analyticsPeriod.preset)
+        : '?from=' + encodeURIComponent(analyticsPeriod.from) + '&to=' + encodeURIComponent(analyticsPeriod.to);
+      const a = await api.get('/api/admin/analytics' + q);
       const maxOrders = Math.max(1, ...a.series.map((s) => s.orders));
+      const revEntries = Object.entries(a.revenueByCurrency || {});
+      const revenueLine = revEntries.length
+        ? revEntries.map(([cur, fig]) => fmtMoney(fig.revenueCents, cur)).join(' · ')
+        : fmtMoney(a.totals.revenueCents, currency);
+      const aovLine = revEntries.length
+        ? revEntries.map(([cur, fig]) => fmtMoney(
+          fig.orders > 0 ? Math.round(fig.revenueCents / fig.orders) : 0, cur)).join(' · ')
+        : fmtMoney(a.averageOrderValueCents, currency);
 
       zone.innerHTML =
         '<div class="flex-between mb-2"><h1 class="section-title">' + esc(I.t('analyticsTab')) + '</h1>' +
           '<div class="flex-between" style="gap:8px">' +
           '<a class="btn btn-outline btn-sm" href="/api/admin/reports/orders.csv" download>' + esc(I.t('exportCsv')) + '</a>' +
-          '<select id="an-days"><option value="7"' + (days === 7 ? ' selected' : '') + '>' + esc(I.t('last7')) + '</option>' +
-          '<option value="30"' + (days === 30 ? ' selected' : '') + '>' + esc(I.t('last30')) + '</option>' +
-          '<option value="90"' + (days === 90 ? ' selected' : '') + '>' + esc(I.t('last90')) + '</option></select></div></div>' +
+          '<select id="an-preset">' +
+            '<option value="today"' + (analyticsPeriod.preset === 'today' ? ' selected' : '') + '>' + esc(I.t('presetToday')) + '</option>' +
+            '<option value="7d"' + (analyticsPeriod.preset === '7d' ? ' selected' : '') + '>' + esc(I.t('last7')) + '</option>' +
+            '<option value="30d"' + (analyticsPeriod.preset === '30d' ? ' selected' : '') + '>' + esc(I.t('last30')) + '</option>' +
+            '<option value="custom"' + (!analyticsPeriod.preset ? ' selected' : '') + '>' + esc(I.t('customRange')) + '</option>' +
+          '</select></div></div>' +
+        '<div class="card mb-2" id="an-custom"' + (analyticsPeriod.preset ? ' style="display:none"' : '') + '>' +
+          '<div class="flex-between" style="gap:8px">' +
+            '<label>' + esc(I.t('fromDate')) + ' <input type="date" id="an-from" value="' + esc(analyticsPeriod.from || '') + '"></label>' +
+            '<label>' + esc(I.t('toDate')) + ' <input type="date" id="an-to" value="' + esc(analyticsPeriod.to || '') + '"></label>' +
+            '<button id="an-apply" type="button" class="btn btn-secondary btn-sm">' + esc(I.t('applyBtn')) + '</button>' +
+          '</div></div>' +
 
         '<div class="grid-stats mb-2">' +
           statCard(I.t('totalOrders'), a.totals.orders) +
-          statCard(I.t('revenueL'), fmtMoney(a.totals.revenueCents, currency)) +
-          statCard(I.t('avOrderValue'), fmtMoney(a.averageOrderValueCents, currency)) +
+          statCard(I.t('revenueL'), revenueLine) +
+          statCard(I.t('avOrderValue'), aovLine) +
           statCard(I.t('todaysOrders'), a.today.ordersToday) +
         '</div>' +
+
+        '<section class="card"><h2>' + esc(I.t('pickupDeliveryH')) + '</h2>' +
+          '<div class="rank-row"><span>' + esc(I.t('pickup')) + '</span><span><strong>' + (a.pickupVsDelivery ? a.pickupVsDelivery.pickup : 0) + '</strong> ' + esc(I.t('ordersWord')) + '</span></div>' +
+          '<div class="rank-row"><span>' + esc(I.t('delivery')) + '</span><span><strong>' + (a.pickupVsDelivery ? a.pickupVsDelivery.delivery : 0) + '</strong> ' + esc(I.t('ordersWord')) + '</span></div>' +
+        '</section>' +
+
+        '<section class="card"><h2>' + esc(I.t('statusBreakdownH')) + '</h2>' +
+          (a.statusSplit
+            ? Object.entries(a.statusSplit).map(([st, n]) =>
+                '<div class="rank-row"><span>' + esc(statusLabel(st)) + '</span><span><strong>' + n + '</strong> ' + esc(I.t('ordersWord')) + '</span></div>'
+              ).join('')
+            : '<p class="muted">' + esc(I.t('noSales')) + '</p>') +
+        '</section>' +
+
+        '<section class="card"><h2>' + esc(I.t('preorderBreakdownH')) + '</h2>' +
+          '<div class="rank-row"><span>' + esc(I.t('normalLabel')) + '</span><span><strong>' + (a.preorderSplit ? a.preorderSplit.normal : 0) + '</strong> ' + esc(I.t('ordersWord')) + '</span></div>' +
+          '<div class="rank-row"><span>' + esc(I.t('preorderBadge')) + '</span><span><strong>' + (a.preorderSplit ? a.preorderSplit.preorder : 0) + '</strong> ' + esc(I.t('ordersWord')) + '</span></div>' +
+        '</section>' +
 
         '<section class="card"><h2>' + esc(I.t('dailyOrdersH')) + '</h2><div class="chart">' +
           a.series.map((s) =>
@@ -1243,8 +1410,8 @@
         '<section class="card"><h2>' + esc(I.t('topItemsH')) + '</h2>' +
           (a.topItems.length
             ? a.topItems.map((t, i) =>
-                '<div class="rank-row"><span>' + (i + 1) + '. ' + esc(t.item_name) + '</span>' +
-                '<span><strong>' + t.units + '</strong> ' + esc(I.t('soldW')) + ' · ' + fmtMoney(t.revenueCents, currency) + '</span></div>'
+                '<div class="rank-row"><span>' + (i + 1) + '. ' + esc(t.name || t.item_name) + '</span>' +
+                '<span><strong>' + (t.quantity ?? t.units) + '</strong> ' + esc(I.t('soldW')) + ' · ' + fmtMoney(t.revenueCents, currency) + '</span></div>'
               ).join('')
             : '<p class="muted">' + esc(I.t('noSales')) + '</p>') +
         '</section>';
@@ -1255,7 +1422,24 @@
         el.parentElement.style.justifyContent = 'flex-end';
       });
 
-      document.getElementById('an-days').addEventListener('change', loadAnalytics);
+      document.getElementById('an-preset').addEventListener('change', (e) => {
+        if (e.target.value === 'custom') {
+          analyticsPeriod = { from: analyticsPeriod.from, to: analyticsPeriod.to };
+        } else {
+          analyticsPeriod = { preset: e.target.value };
+        }
+        loadAnalytics();
+      });
+      const applyBtn = document.getElementById('an-apply');
+      if (applyBtn) {
+        applyBtn.addEventListener('click', () => {
+          analyticsPeriod = {
+            from: document.getElementById('an-from').value,
+            to: document.getElementById('an-to').value,
+          };
+          loadAnalytics();
+        });
+      }
     } catch (err) {
       zone.innerHTML = errorHtml(err);
     }

@@ -51,11 +51,10 @@ router.post(
     }
 
     const order = await ordersService.createCheckout({ restaurantId: restaurant.id, payload });
-    sse.broadcast(restaurant.id, 'order:new', {
-      orderId: order.id,
-      code: order.code,
-      totalCents: order.total_cents,
-      orderType: payload.orderType,
+    // Non-blocking: order is committed; notification failures must not fail checkout.
+    require('../services/notifications.service').emit({
+      restaurantId: restaurant.id, type: 'order.created', orderId: order.id,
+      orderCode: order.code, totalCents: order.total_cents, orderType: payload.orderType,
     });
 
     res.status(201).json({
@@ -110,8 +109,9 @@ router.post(
     const code = String((req.body && req.body.code) || '').trim().toUpperCase();
     if (!/^[A-Za-z0-9]{6,12}$/.test(code)) throw notFound('No order found for this tracking code');
     const result = await ordersService.cancelByCustomer(code, config.customerCancelGraceMs);
-    sse.broadcast(result.restaurantId, 'order:status', {
-      orderId: result.id, code: result.code, status: result.status,
+    require('../services/notifications.service').emit({
+      restaurantId: result.restaurantId, type: 'order.status_changed',
+      orderId: result.id, orderCode: result.code, status: result.status,
     });
     res.json({ ok: true, order: { code: result.code, status: result.status } });
   })

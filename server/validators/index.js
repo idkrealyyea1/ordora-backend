@@ -379,7 +379,78 @@ function validatePagination(query) {
   return { limit, offset: (page - 1) * limit, page };
 }
 
-/* ---------------------- product options ---------------------- */
+/* Analytics period: presets plus a bounded custom range (mutually exclusive). */
+
+const ANALYTICS_PRESETS = ['today', '7d', '30d'];
+const ANALYTICS_MAX_RANGE_DAYS = 90;
+
+function parseAnalyticsDate(value, field) {
+  const s = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw badRequest(`${field} must be YYYY-MM-DD`, [{ field }]);
+  const d = new Date(s + 'T00:00:00Z');
+  if (Number.isNaN(d.getTime())) throw badRequest(`${field} is not a valid date`, [{ field }]);
+  return s;
+}
+
+function validateAnalyticsPeriod(query = {}) {
+  const { preset, from, to, days } = query;
+  if ((from !== undefined || to !== undefined) && days !== undefined) {
+    throw badRequest('Use either days or from/to, not both', [{ field: 'days' }]);
+  }
+  if (from !== undefined || to !== undefined) {
+    if (from === undefined || to === undefined) throw badRequest('from and to are both required', [{ field: 'from' }]);
+    const fromStr = parseAnalyticsDate(from, 'from');
+    const toStr = parseAnalyticsDate(to, 'to');
+    if (fromStr > toStr) throw badRequest('from must not be after to', [{ field: 'from' }]);
+    const span = (new Date(toStr + 'T00:00:00Z') - new Date(fromStr + 'T00:00:00Z')) / 86400000 + 1;
+    if (span > ANALYTICS_MAX_RANGE_DAYS) {
+      throw badRequest(`Custom range must not exceed ${ANALYTICS_MAX_RANGE_DAYS} days`, [{ field: 'to' }]);
+    }
+    return { mode: 'range', from: fromStr, to: toStr };
+  }
+  if (preset !== undefined && preset !== '') {
+    const p = String(preset).trim().toLowerCase();
+    if (!ANALYTICS_PRESETS.includes(p)) {
+      throw badRequest('preset must be one of: today, 7d, 30d', [{ field: 'preset' }]);
+    }
+    return { mode: 'preset', preset: p };
+  }
+  const n = Math.min(Math.max(Number.parseInt(days, 10) || 7, 1), 90);
+  return { mode: 'days', days: n };
+}
+
+/* ---------------------- push subscriptions --------------------- */
+
+function assertPushUrl(value, field = 'endpoint') {
+  const s = String(value || '').trim();
+  if (s.length < 10 || s.length > 2000) throw badRequest(`${field} must be 10-2000 characters`, [{ field }]);
+  let u;
+  try {
+    u = new URL(s);
+  } catch {
+    throw badRequest(`${field} must be a valid URL`, [{ field }]);
+  }
+  if (u.protocol !== 'https:') throw badRequest(`${field} must use https`, [{ field }]);
+  return s;
+}
+
+function assertPushKey(value, field) {
+  const s = String(value || '').trim();
+  if (!s || s.length > 512 || !/^[A-Za-z0-9\-_]+={0,2}$/.test(s)) {
+    throw badRequest(`${field} must be non-empty base64url (max 512 chars)`, [{ field }]);
+  }
+  return s;
+}
+
+function validatePushSubscription(body = {}) {
+  const keys = (body && body.keys) || {};
+  return {
+    endpoint: assertPushUrl(body.endpoint, 'endpoint'),
+    p256dh: assertPushKey(keys.p256dh, 'keys.p256dh'),
+    auth: assertPushKey(keys.auth, 'keys.auth'),
+    label: cleanText(body.label, { field: 'label', max: 60 }) || '',
+  };
+}
 
 const OPTION_PRICING_MODES = ['replace', 'adjust'];
 
@@ -475,6 +546,63 @@ function validateSelections(selections) {
   });
 }
 
+/* --------------------- self-service signup ---------------------- */
+
+/**
+ * Business-type choices offered at public signup: six named types plus an
+ * `other` fallback (spec 013 clarification 2026-10-02). Raw stored-only
+ * values outside this set are rejected here; `resolveSignupType` maps the
+ * choice to a value satisfying the restaurants CHECK constraint.
+ */
+const SIGNUP_TYPES = [
+  'restaurant', 'cafe', 'bakery', 'dessert_shop', 'home_kitchen', 'cloud_kitchen', 'other',
+];
+
+/** `other` maps to the generic stored bucket for miscellaneous food businesses. */
+function resolveSignupType(choice) {
+  return choice === 'other' ? 'small_food_business' : choice;
+}
+
+function validateSignupType(value) {
+  const t = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+  if (!SIGNUP_TYPES.includes(t)) {
+    throw badRequest('businessType must be one of: ' + SIGNUP_TYPES.join(', '), [{ field: 'businessType' }]);
+  }
+  return t;
+}
+
+function validateSignup(body = {}) {
+  if (typeof body !== 'object' || body === null) throw badRequest('Invalid signup data');
+  // Mass-assignment guard: plan/capability/tenant claims are never read.
+  for (const f of ['plan', 'capabilities', 'restaurant_id', 'restaurantId', 'owner_id', 'ownerId', 'role']) {
+    if (body[f] !== undefined) throw badRequest(`Field not allowed: ${f}`, [{ field: f }]);
+  }
+  return {
+    email: validateEmailOptional(body.email),
+    username: validateUsername(body.username),
+    password: validatePassword(body.password),
+    businessName: requireText(body.businessName, NAME_OPTS),
+    businessType: validateSignupType(body.businessType),
+    slug: body.slug === undefined || body.slug === '' ? undefined : normalizeSlug(String(body.slug)),
+  };
+}
+
+function validateSlugAvailability(query = {}) {
+  const raw = query.slug !== undefined && query.slug !== '' ? query.slug : query.name;
+  if (raw === undefined || raw === '') throw badRequest('slug or name is required', [{ field: 'slug' }]);
+  return normalizeSlug(String(raw));
+}
+
+const ONBOARDING_STEPS = ['type', 'info', 'setup', 'product', 'fulfillment', 'hours', 'review', 'done'];
+
+function validateOnboardingStep(body = {}) {
+  const step = String(body.step === undefined || body.step === null ? '' : body.step).trim().toLowerCase();
+  if (!ONBOARDING_STEPS.includes(step) || step === 'done') {
+    throw badRequest('step must be one of: type, info, setup, product, fulfillment, hours, review', [{ field: 'step' }]);
+  }
+  return step;
+}
+
 module.exports = {
   validateLogin,
   validateRestaurantCreate,
@@ -500,10 +628,20 @@ module.exports = {
   validatePlatformPricing,
   validateRestaurantRequest,
   validatePagination,
+  validateAnalyticsPeriod,
+  ANALYTICS_PRESETS,
   validateOptionGroupCreate,
   validateOptionGroupUpdate,
   validateOptionChoiceCreate,
   validateOptionChoiceUpdate,
   validateSelections,
+  validatePushSubscription,
+  validateSignup,
+  validateSignupType,
+  resolveSignupType,
+  validateSlugAvailability,
+  validateOnboardingStep,
+  ONBOARDING_STEPS,
+  SIGNUP_TYPES,
   assertUuid,
 };

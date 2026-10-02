@@ -480,6 +480,7 @@ table.data th {
 .tab-btn.active { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
 
 .order-card { border-inline-start: 4px solid var(--border-strong); }
+.order-card.order-new { border-inline-start-color: var(--success); box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 35%, transparent); }
 .order-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 .order-code {
   font-family: var(--font-mono);

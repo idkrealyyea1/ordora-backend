@@ -387,12 +387,13 @@ async function listForRestaurant(restaurantId, { status, limit, offset }) {
   params.push(limit, offset);
   const { rows } = await query(
     `SELECT o.*, COUNT(oi.id)::int AS item_line_count,
-            COALESCE(SUM(oi.quantity), 0)::int AS total_units
+            COALESCE(SUM(oi.quantity), 0)::int AS total_units,
+            EXISTS(SELECT 1 FROM order_items oi2 WHERE oi2.order_id = o.id AND oi2.is_preorder) AS has_preorder
      FROM orders o
      LEFT JOIN order_items oi ON oi.order_id = o.id
      WHERE ${where}
      GROUP BY o.id
-     ORDER BY o.created_at DESC
+     ORDER BY CASE WHEN o.status = 'pending' THEN 0 ELSE 1 END, o.created_at DESC
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
@@ -444,9 +445,18 @@ async function updateStatus(orderId, restaurantId, nextStatus) {
 async function changeStatus(orderId, restaurantId, nextStatus) {
   const id = await resolveOrderId(orderId, restaurantId);
   const current = (
-    await query('SELECT status, order_type FROM orders WHERE id = $1 AND restaurant_id = $2', [id, restaurantId])
+    await query('SELECT id, code, status, order_type FROM orders WHERE id = $1 AND restaurant_id = $2', [id, restaurantId])
   ).rows[0];
   if (!current) throw notFound('Order not found');
+  // Same-status repeat is a safe no-op while the order is still active
+  // (double-submit safe). Terminal states stay strictly immutable: even
+  // re-asserting them is refused so history can never be rewritten.
+  if (current.status === nextStatus) {
+    if (current.status === 'completed' || current.status === 'cancelled') {
+      throw conflict('TERMINAL_STATE', `Order is already "${current.status}" and cannot be changed`);
+    }
+    return { id: current.id, code: current.code, status: current.status };
+  }
   assertTransition(current.status, nextStatus, current.order_type);
   return updateStatus(id, restaurantId, nextStatus);
 }
@@ -495,29 +505,25 @@ async function dashboardCounts(restaurantId, timezone) {
   };
 }
 
-async function analyticsSeries(restaurantId, timezone, days) {
+async function analyticsSeries(restaurantId, timezone, daysOrPeriod) {
+  const { from, to } = toPeriodBounds(daysOrPeriod, timezone);
   const res = await query(
     `SELECT to_char((created_at AT TIME ZONE $2)::date, 'YYYY-MM-DD') AS day,
             COUNT(*)::int AS orders,
             COALESCE(SUM(total_cents), 0)::bigint AS revenue_cents
      FROM orders
      WHERE restaurant_id = $1 AND ${REVENUE_SQL}
-       AND (created_at AT TIME ZONE $2)::date >= ((now() AT TIME ZONE $2)::date - ($3::int - 1))
+       AND (created_at AT TIME ZONE $2)::date BETWEEN $3::date AND $4::date
      GROUP BY 1
      ORDER BY 1`,
-    [restaurantId, timezone, days]
+    [restaurantId, timezone, from, to]
   );
 
   // Fill zero-days so charts are continuous.
   const byDay = new Map(res.rows.map((r) => [r.day, r]));
   const series = [];
-  const cursor = new Date();
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(cursor.getTime() - i * 86400000);
-    // Label using the restaurant's timezone.
-    const label = new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
-    }).format(d);
+  for (let d = new Date(from + 'T00:00:00Z'); d <= new Date(to + 'T00:00:00Z'); d = new Date(d.getTime() + 86400000)) {
+    const label = d.toISOString().slice(0, 10);
     const hit = byDay.get(label);
     series.push({
       day: label,
@@ -537,56 +543,136 @@ async function analyticsSeries(restaurantId, timezone, days) {
       `SELECT DISTINCT UPPER(COALESCE(currency, 'USD')) AS currency
        FROM orders
        WHERE restaurant_id = $1 AND ${REVENUE_SQL}
-         AND created_at >= now() - ($2::int * INTERVAL '1 day')`,
-      [restaurantId, days]
+         AND (created_at AT TIME ZONE 'UTC')::date BETWEEN $2::date AND $3::date`,
+      [restaurantId, from, to]
     )
   ).rows.map((r) => r.currency);
-  return { series, totals, currencies };
+  return { series, totals, currencies, revenueByCurrency: await revenueByCurrency(restaurantId, from, to) };
 }
 
-async function topItems(restaurantId, days = 30, limit = 10) {
+/** Revenue + order counts grouped by frozen order currency. No conversion. */
+async function revenueByCurrency(restaurantId, from, to) {
   const { rows } = await query(
-    `SELECT oi.item_name, SUM(oi.quantity)::int AS units, COALESCE(SUM(oi.line_total_cents),0)::bigint AS revenue_cents
+    `SELECT UPPER(COALESCE(currency, 'USD')) AS currency,
+            COUNT(*)::int AS orders,
+            COALESCE(SUM(total_cents), 0)::bigint AS revenue_cents
+     FROM orders
+     WHERE restaurant_id = $1 AND ${REVENUE_SQL}
+       AND (created_at AT TIME ZONE 'UTC')::date BETWEEN $2::date AND $3::date
+     GROUP BY 1`,
+    [restaurantId, from, to]
+  );
+  const out = {};
+  for (const r of rows) out[r.currency] = { orders: r.orders, revenueCents: Number(r.revenue_cents) };
+  return out;
+}
+
+/** Status / pickup-vs-delivery / normal-vs-preorder splits for a period. */
+async function orderSplits(restaurantId, from, to) {
+  const { rows } = await query(
+    `SELECT o.status, o.order_type,
+            EXISTS(SELECT 1 FROM order_items oi WHERE oi.order_id = o.id AND oi.is_preorder) AS is_preorder
+     FROM orders o
+     WHERE o.restaurant_id = $1
+       AND (o.created_at AT TIME ZONE 'UTC')::date BETWEEN $2::date AND $3::date`,
+    [restaurantId, from, to]
+  );
+  const statusSplit = {};
+  const pickupVsDelivery = { pickup: 0, delivery: 0 };
+  const preorderSplit = { normal: 0, preorder: 0 };
+  for (const r of rows) {
+    statusSplit[r.status] = (statusSplit[r.status] || 0) + 1;
+    if (r.order_type === 'delivery') pickupVsDelivery.delivery += 1;
+    else pickupVsDelivery.pickup += 1;
+    if (r.is_preorder) preorderSplit.preorder += 1;
+    else preorderSplit.normal += 1;
+  }
+  return { statusSplit, pickupVsDelivery, preorderSplit };
+}
+
+/** Resolve a days number or {mode,preset,from,to} into [from,to] date labels. */
+function toPeriodBounds(daysOrPeriod, timezone) {
+  const today = tzToday(timezone);
+  if (daysOrPeriod && typeof daysOrPeriod === 'object') {
+    const p = daysOrPeriod;
+    if (p.mode === 'range') return { from: p.from, to: p.to };
+    if (p.mode === 'preset') {
+      if (p.preset === 'today') return { from: today, to: today };
+      if (p.preset === '30d') return { from: shiftDate(today, -29), to: today };
+      return { from: shiftDate(today, -6), to: today };
+    }
+    return { from: shiftDate(today, -(p.days - 1)), to: today };
+  }
+  const days = Math.min(Math.max(Number(daysOrPeriod) || 7, 1), 90);
+  return { from: shiftDate(today, -(days - 1)), to: today };
+}
+
+function tzToday(timezone) {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function shiftDate(label, deltaDays) {
+  const d = new Date(label + 'T00:00:00Z');
+  return new Date(d.getTime() + deltaDays * 86400000).toISOString().slice(0, 10);
+}
+
+async function topItems(restaurantId, daysOrPeriod = 30, limit = 10) {
+  // Counts parent order_items rows only: option/variant lines live in
+  // order_item_options and roll their revenue into the parent line.
+  const period = typeof daysOrPeriod === 'object' ? daysOrPeriod : { mode: 'days', days: Math.max(daysOrPeriod, 30) };
+  const { from, to } = toPeriodBounds(period, 'UTC');
+  const { rows } = await query(
+    `SELECT oi.menu_item_id, oi.item_name, SUM(oi.quantity)::int AS units, COALESCE(SUM(oi.line_total_cents),0)::bigint AS revenue_cents
      FROM order_items oi
      JOIN orders o ON o.id = oi.order_id
      WHERE o.restaurant_id = $1 AND ${REVENUE_SQL_O}
-       AND o.created_at >= now() - ($2::int * INTERVAL '1 day')
-     GROUP BY oi.item_name
+       AND (o.created_at AT TIME ZONE 'UTC')::date BETWEEN $2::date AND $3::date
+     GROUP BY oi.menu_item_id, oi.item_name
      ORDER BY units DESC
-     LIMIT $3`,
-    [restaurantId, days, limit]
+     LIMIT $4`,
+    [restaurantId, from, to, limit]
   );
-  return rows.map((r) => ({ ...r, revenueCents: Number(r.revenue_cents) }));
+  return rows.map((r) => ({
+    ...r, quantity: r.units, name: r.item_name, revenueCents: Number(r.revenue_cents),
+  }));
 }
 
-/** Orders grouped by day of week (0=Sunday..6) over the last `days`. */
-async function byDayOfWeek(restaurantId, timezone, days) {
+/** Orders grouped by day of week (0=Sunday..6) over the period. */
+async function byDayOfWeek(restaurantId, timezone, daysOrPeriod) {
+  const { from, to } = toPeriodBounds(daysOrPeriod, timezone);
   const { rows } = await query(
     `SELECT extract(dow FROM (o.created_at AT TIME ZONE $2))::int AS dow,
             COUNT(*)::int AS orders,
             COALESCE(SUM(o.total_cents), 0)::bigint AS revenue_cents
      FROM orders o
      WHERE o.restaurant_id = $1 AND ${REVENUE_SQL_O}
-       AND (o.created_at AT TIME ZONE $2)::date >= ((now() AT TIME ZONE $2)::date - ($3::int - 1))
+       AND (o.created_at AT TIME ZONE $2)::date BETWEEN $3::date AND $4::date
      GROUP BY dow
      ORDER BY dow`,
-    [restaurantId, timezone, days]
+    [restaurantId, timezone, from, to]
   );
   return rows.map((r) => ({ dow: r.dow, orders: r.orders, revenueCents: Number(r.revenue_cents) }));
 }
 
-/** Orders grouped by hour of day (0..23, restaurant-local time) over the last `days`. */
-async function byHour(restaurantId, timezone, days) {
+/** Orders grouped by hour of day (0..23, restaurant-local time) over the period. */
+async function byHour(restaurantId, timezone, daysOrPeriod) {
+  const { from, to } = toPeriodBounds(daysOrPeriod, timezone);
   const { rows } = await query(
     `SELECT extract(hour FROM (o.created_at AT TIME ZONE $2))::int AS hour,
             COUNT(*)::int AS orders,
             COALESCE(SUM(o.total_cents), 0)::bigint AS revenue_cents
      FROM orders o
      WHERE o.restaurant_id = $1 AND ${REVENUE_SQL_O}
-       AND (o.created_at AT TIME ZONE $2)::date >= ((now() AT TIME ZONE $2)::date - ($3::int - 1))
+       AND (o.created_at AT TIME ZONE $2)::date BETWEEN $3::date AND $4::date
      GROUP BY hour
      ORDER BY hour`,
-    [restaurantId, timezone, days]
+    [restaurantId, timezone, from, to]
   );
   return rows.map((r) => ({ hour: r.hour, orders: r.orders, revenueCents: Number(r.revenue_cents) }));
 }
@@ -708,6 +794,8 @@ module.exports = {
   archiveOrder,
   dashboardCounts,
   analyticsSeries,
+  revenueByCurrency,
+  orderSplits,
   topItems,
   byDayOfWeek,
   byHour,

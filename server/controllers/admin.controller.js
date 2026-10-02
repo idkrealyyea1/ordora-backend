@@ -111,7 +111,10 @@ async function getOrder(req, res) {
 async function changeOrderStatus(req, res) {
   const { status } = v.validateStatusChange(req.body);
   const row = await orders.changeStatus(req.params.id, tenantId(req), status);
-  sse.broadcast(tenantId(req), 'order:status', { orderId: row.id, code: row.code, status: row.status });
+  require('../services/notifications.service').emit({
+    restaurantId: tenantId(req), type: 'order.status_changed',
+    orderId: row.id, orderCode: row.code, status: row.status,
+  });
   res.json({ order: row });
 }
 
@@ -320,18 +323,52 @@ async function qrCode(req, res) {
 
 async function analytics(req, res) {
   const id = tenantId(req);
-  const days = Math.min(Math.max(Number.parseInt(req.query.days, 10) || 7, 1), 90);
+  const period = v.validateAnalyticsPeriod(req.query);
   const tz = await tzOf(id);
-  const [series, top, byDow, byHour] = await Promise.all([
-    orders.analyticsSeries(id, tz, days),
-    orders.topItems(id, Math.max(days, 30)),
-    orders.byDayOfWeek(id, tz, days),
-    orders.byHour(id, tz, days),
+  const topDays = period.mode === 'days' ? Math.max(period.days, 30) : period;
+  const [series, top, byDow, byHourRes, splits] = await Promise.all([
+    orders.analyticsSeries(id, tz, period.mode === 'days' ? period.days : period),
+    orders.topItems(id, topDays),
+    orders.byDayOfWeek(id, tz, period.mode === 'days' ? period.days : period),
+    orders.byHour(id, tz, period.mode === 'days' ? period.days : period),
+    orders.orderSplits(id, ...periodRange(period, tz)),
   ]);
   const averages = series.totals.orders > 0
     ? { averageOrderValueCents: Math.round(series.totals.revenueCents / series.totals.orders) }
     : { averageOrderValueCents: 0 };
-  res.json({ ...series, ...averages, today: await orders.dashboardCounts(id, tz), topItems: top, byDayOfWeek: byDow, byHour });
+  const averageOrderValueByCurrency = {};
+  for (const [cur, fig] of Object.entries(series.revenueByCurrency || {})) {
+    averageOrderValueByCurrency[cur] = fig.orders > 0 ? Math.round(fig.revenueCents / fig.orders) : 0;
+  }
+  res.json({
+    ...series, ...averages, today: await orders.dashboardCounts(id, tz),
+    topItems: top, byDayOfWeek: byDow, byHour: byHourRes,
+    period: { ...period, timezone: tz },
+    averageOrderValueByCurrency,
+    pickupVsDelivery: splits.pickupVsDelivery,
+    statusSplit: splits.statusSplit,
+    preorderSplit: splits.preorderSplit,
+  });
+}
+
+/** [from, to] date labels for a validated period (matches service bounds). */
+function periodRange(period, tz) {
+  if (period.mode === 'range') return [period.from, period.to];
+  let today;
+  try {
+    today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+  } catch {
+    today = new Date().toISOString().slice(0, 10);
+  }
+  const shift = (n) => new Date(new Date(today + 'T00:00:00Z').getTime() + n * 86400000).toISOString().slice(0, 10);
+  if (period.mode === 'preset') {
+    if (period.preset === 'today') return [today, today];
+    if (period.preset === '30d') return [shift(-29), today];
+    return [shift(-6), today];
+  }
+  return [shift(-(period.days - 1)), today];
 }
 
 /* ----------------------------- reports ---------------------------- */
@@ -365,6 +402,29 @@ function events(req, res) {
   });
   res.write('retry: 5000\n\n');
   sse.addClient(id, res);
+}
+
+/* --------------------- push subscriptions ------------------------ */
+
+const notify = require('../services/notifications.service');
+
+async function pushPublicKey(req, res) {
+  res.json(notify.vapidPublic());
+}
+
+async function listPushSubscriptions(req, res) {
+  res.json({ subscriptions: await notify.listSubscriptions(tenantId(req)) });
+}
+
+async function createPushSubscription(req, res) {
+  const data = v.validatePushSubscription(req.body);
+  res.status(201).json({ subscription: await notify.saveSubscription(tenantId(req), data) });
+}
+
+async function deletePushSubscription(req, res) {
+  const ok = await notify.removeSubscription(tenantId(req), assertUuid(req.params.id, 'id'));
+  if (!ok) throw notFound('Subscription not found');
+  res.json({ ok: true });
 }
 
 /* --------------------- delivery companies -------------------------- */
@@ -419,4 +479,8 @@ module.exports = {
   analytics: asyncHandler(analytics),
   ordersReportCsv: asyncHandler(ordersReportCsv),
   events,
+  pushPublicKey: asyncHandler(pushPublicKey),
+  listPushSubscriptions: asyncHandler(listPushSubscriptions),
+  createPushSubscription: asyncHandler(createPushSubscription),
+  deletePushSubscription: asyncHandler(deletePushSubscription),
 };
