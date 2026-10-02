@@ -71,8 +71,18 @@ function me(req, res) {
       restaurantName: req.user.restaurant_name,
       restaurantSlug: req.user.restaurant_slug,
       deliveryGroupId: req.user.delivery_group_id,
+      platformLanguage: req.user.platform_language || 'ar',
     },
   });
 }
 
-module.exports = { login: asyncHandler(login), logout: asyncHandler(logout), me };
+async function setLanguage(req, res) {
+  const locale = String((req.body && req.body.locale) || '').toLowerCase();
+  if (locale !== 'ar' && locale !== 'en') {
+    return res.status(400).json({ error: 'locale must be "ar" or "en"' });
+  }
+  if (req.user) await users.setPlatformLanguage(req.user.id, locale);
+  res.json({ ok: true, locale });
+}
+
+module.exports = { login: asyncHandler(login), logout: asyncHandler(logout), me, setLanguage: asyncHandler(setLanguage) };

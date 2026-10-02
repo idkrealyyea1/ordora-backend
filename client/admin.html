@@ -39,18 +39,22 @@
       <span id="open-badge"></span>
       <span class="spacer"></span>
       <button id="logout-btn" type="button" class="btn btn-outline btn-sm" data-i18n="logout">خروج</button>
+      <button id="nav-burger" type="button" class="btn btn-outline btn-sm" aria-label="Menu" aria-expanded="false">☰</button>
     </div>
   </header>
+
+  <div id="nav-overlay" class="nav-drawer-overlay" hidden></div>
+  <nav id="nav-drawer" class="nav-drawer" aria-label="Sections" hidden></nav>
 
   <div class="dash-layout">
     <nav class="dash-side" aria-label="Sections">
       <button class="side-link active" data-tab="dashboard" data-i18n="dash">لوحة التحكم</button>
-      <button class="side-link" data-tab="orders"><span data-i18n="ordersTab">الطلبات</span> <span id="orders-live-dot" class="badge badge-open hidden" data-i18n="live">مباشر</span></button>
-      <button class="side-link" data-tab="bookings" data-i18n="bookingsTab">الحجوزات</button>
-      <button class="side-link" data-tab="menu" data-i18n="menuTab">القائمة</button>
-      <button class="side-link" data-tab="settings" data-i18n="settingsTab">الإعدادات</button>
-      <button class="side-link" data-tab="analytics" data-i18n="analyticsTab">التحليلات</button>
-      <button class="side-link" data-tab="share" data-i18n="shareNav">مشاركة</button>
+      <button class="side-link" data-tab="orders" data-cap="orders"><span data-i18n="ordersTab">الطلبات</span> <span id="orders-live-dot" class="badge badge-open hidden" data-i18n="live">مباشر</span></button>
+      <button class="side-link" data-tab="bookings" data-cap="orders" data-i18n="bookingsTab">الحجوزات</button>
+      <button class="side-link" data-tab="menu" data-cap="products" data-i18n="menuTab">القائمة</button>
+      <button class="side-link" data-tab="settings" data-cap="__always" data-i18n="settingsTab">الإعدادات</button>
+      <button class="side-link" data-tab="analytics" data-cap="advanced_analytics" data-i18n="analyticsTab">التحليلات</button>
+      <button class="side-link" data-tab="share" data-cap="sharing" data-i18n="shareNav">مشاركة</button>
     </nav>
 
     <main class="dash-main">

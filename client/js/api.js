@@ -67,17 +67,17 @@
       .replace(/'/g, '&#39;');
   }
 
-  function fmtMoney(cents, currency) {
+  function fmtMoney(cents, currency, locale) {
     try {
-      return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format((cents || 0) / 100);
+      return new Intl.NumberFormat(locale || document.documentElement.lang || undefined, { style: 'currency', currency }).format((cents || 0) / 100);
     } catch (_) {
       return ((cents || 0) / 100).toFixed(2) + ' ' + currency;
     }
   }
 
-  function fmtDateTime(value) {
+  function fmtDateTime(value, locale) {
     try {
-      return new Date(value).toLocaleString();
+      return new Date(value).toLocaleString(locale || document.documentElement.lang || undefined);
     } catch (_) {
       return String(value);
     }

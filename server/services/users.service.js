@@ -184,6 +184,15 @@ async function findByGroup(deliveryGroupId) {
   return rows[0] || null;
 }
 
+async function setPlatformLanguage(userId, locale) {
+  if (locale !== 'ar' && locale !== 'en') {
+    const { badRequest } = require('../utils/errors');
+    throw badRequest('locale must be "ar" or "en"');
+  }
+  await query('UPDATE users SET platform_language = $1 WHERE id = $2', [locale, userId]);
+  return locale;
+}
+
 module.exports = {
   hashPassword,
   verifyPassword,
@@ -204,4 +213,5 @@ module.exports = {
   deleteDelivery,
   listDeliveriesForGroup,
   findByGroup,
+  setPlatformLanguage,
 };

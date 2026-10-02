@@ -138,6 +138,31 @@ router.post(
 
 router.get('/healthz', (req, res) => res.json({ ok: true }));
 
+router.get('/translations', asyncHandler(async (req, res) => {
+  const locale = String(req.query.locale || 'ar').trim().toLowerCase();
+  const supported = ['ar', 'en'];
+  const effective = supported.includes(locale) ? locale : 'ar';
+  const translations = require('../services/translations.service');
+  const t = await translations.getTranslations(effective);
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.json({ locale: effective, translations: t });
+}));
+
+router.get('/seo/business/:slug', asyncHandler(async (req, res) => {
+  const seo = require('../services/seo.service');
+  const business = await seo.getBusinessBySlug(String(req.params.slug).toLowerCase());
+  if (!business) throw notFound('Business not found');
+  const origin = (config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+  const metadata = await seo.generateBusinessMetadata(business, origin);
+  res.json(metadata);
+}));
+
+router.get('/restaurants/:slug/hero-images', asyncHandler(async (req, res) => {
+  const restaurants = require('../services/restaurants.service');
+  const images = await restaurants.getHeroImagesForSlug(String(req.params.slug).toLowerCase());
+  res.json({ heroImages: images });
+}));
+
 // Public offer preview — shareable without auth (code is unguessable 8 chars)
 router.get(
   '/offer/:code',

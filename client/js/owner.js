@@ -38,6 +38,31 @@
       location.href = '/login.html';
     });
 
+    (function initDrawer() {
+      const burger = document.getElementById('nav-burger');
+      const drawer = document.getElementById('nav-drawer');
+      const overlay = document.getElementById('nav-overlay');
+      if (!burger || !drawer) return;
+      function openDrawer() {
+        drawer.hidden = false; overlay.hidden = false;
+        requestAnimationFrame(() => drawer.classList.add('open'));
+        document.body.classList.add('drawer-open');
+        burger.setAttribute('aria-expanded', 'true');
+      }
+      function closeDrawer() {
+        drawer.classList.remove('open');
+        overlay.hidden = true;
+        document.body.classList.remove('drawer-open');
+        burger.setAttribute('aria-expanded', 'false');
+        setTimeout(() => { if (!drawer.classList.contains('open')) drawer.hidden = true; }, 200);
+      }
+      burger.addEventListener('click', () => (drawer.classList.contains('open') ? closeDrawer() : openDrawer()));
+      overlay.addEventListener('click', closeDrawer);
+      drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && drawer.classList.contains('open')) closeDrawer(); });
+      window.addEventListener('resize', () => { if (window.innerWidth >= 900) closeDrawer(); });
+    })();
+
         document.getElementById('new-restaurant-btn').addEventListener('click', createModal);
 
     const dgForm = document.getElementById('delivery-form');
@@ -96,6 +121,35 @@
     });
 
     await Promise.all([loadOverview(), loadRestaurants(), loadDeliveryGroups(), loadPricing(), loadRequests()]);
+    loadTranslations();
+    document.getElementById('tr-search').addEventListener('input', debounce(() => loadTranslations(), 250));
+
+    async function loadTranslations() {
+      const zone = document.getElementById('translations-zone');
+      if (!zone) return;
+      const q = (document.getElementById('tr-search').value || '').toLowerCase();
+      try {
+        const { translations } = await api.get('/api/owner/translations');
+        const rows = translations.filter((r) => !q || r.key.toLowerCase().includes(q)).slice(0, 50);
+        zone.innerHTML = rows.map((r) =>
+          '<div data-tkey="' + esc(r.key) + '" data-tloc="' + esc(r.locale) + '" style="display:grid;grid-template-columns:1fr 120px 2fr auto;gap:6px;align-items:center;margin-bottom:6px">' +
+          '<small class="muted">' + esc(r.key) + '</small>' +
+          '<small>' + esc(r.locale) + '</small>' +
+          '<input class="tr-val" value="' + esc(r.value) + '" maxlength="500">' +
+          '<button type="button" class="btn btn-outline btn-sm tr-save">Save</button></div>'
+        ).join('') || '<p class="muted small">No translations found.</p>';
+        zone.querySelectorAll('.tr-save').forEach((b) => b.addEventListener('click', async () => {
+          const row = b.closest('[data-tkey]');
+          const value = row.querySelector('.tr-val').value;
+          try {
+            await api.request('/api/owner/translations/' + encodeURIComponent(row.dataset.tkey), {
+              method: 'PUT', body: { locale: row.dataset.tloc, value },
+            });
+            toast('Saved', 'success');
+          } catch (e) { toast(e.message, 'error'); }
+        }));
+      } catch (e) { zone.textContent = e.message; }
+    }
 
     // Requests filters
     const reqStatus = document.getElementById('requests-status');
@@ -575,9 +629,47 @@
 
         '<h3 class="section-title">' + I.t('mRecentOrders') + '</h3><div id="owner-orders" class="mb-2"><div class="empty-state small">' + I.t('mLoading') + '</div></div>' +
 
+        '<h3 class="section-title">' + I.t('heroImages') + '</h3><div id="owner-hero" class="mb-2"><div class="empty-state small">' + I.t('mLoading') + '</div></div>' +
+        '<form id="owner-hero-form" class="mt-1"><input id="oh-file" type="file" accept="image/jpeg,image/png,image/webp">' +
+        '<button type="submit" class="btn btn-outline btn-sm mt-1">' + esc(I.t('uploadHeroImage')) + '</button></form>' +
+
         '<h3 class="section-title">' + I.t('mSubscription') + '</h3><div id="owner-sub" class="mb-2"><div class="empty-state small">' + I.t('mLoading') + '</div></div>'
       );
       document.querySelector('.modal-close').addEventListener('click', closeModal);
+
+      const loadOwnerHero = async () => {
+        const zone = document.getElementById('owner-hero');
+        if (!zone) return;
+        try {
+          const { heroImages } = await api.get('/api/admin/hero-images?restaurantId=' + id);
+          zone.innerHTML = heroImages.length ? heroImages.map((h) =>
+            '<div data-hid="' + esc(h.id) + '" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+            '<img src="' + esc(h.image_path) + '" width="64" height="36" style="object-fit:cover;border-radius:6px">' +
+            '<small>#' + h.position + (h.is_primary ? ' ★' : '') + '</small>' +
+            (h.is_primary ? '' : '<button type="button" class="btn btn-outline btn-sm" data-hp>Primary</button>') +
+            '<button type="button" class="btn btn-outline btn-sm" data-hd>Remove</button></div>'
+          ).join('') : '<small class="muted">' + esc(I.t('noHeroImages')) + '</small>';
+          zone.querySelectorAll('[data-hp]').forEach((b) => b.addEventListener('click', async () => {
+            await api.request('/api/admin/hero-images/' + b.closest('[data-hid]').dataset.hid + '?restaurantId=' + id, { method: 'PATCH', body: { isPrimary: true } });
+            loadOwnerHero();
+          }));
+          zone.querySelectorAll('[data-hd]').forEach((b) => b.addEventListener('click', async () => {
+            await api.request('/api/admin/hero-images/' + b.closest('[data-hid]').dataset.hid + '?restaurantId=' + id, { method: 'DELETE' });
+            loadOwnerHero();
+          }));
+        } catch (e) { zone.textContent = e.message; }
+      };
+      loadOwnerHero();
+      document.getElementById('owner-hero-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const f = document.getElementById('oh-file').files[0];
+        if (!f) return;
+        const opt = await App.compressImage(f, { max: 1600, quality: 0.75 });
+        const fd = new FormData();
+        fd.append('image', opt, 'hero.webp');
+        await api.request('/api/admin/images?type=hero&restaurantId=' + id, { method: 'POST', body: fd });
+        loadOwnerHero();
+      });
 
       // Subscription status + minimal actions (Task 14: no billing console).
       api.get('/api/owner/restaurants/' + id + '/subscription').then((sub) => {

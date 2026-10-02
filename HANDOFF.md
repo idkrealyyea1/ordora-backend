@@ -233,6 +233,15 @@ with `data-i18n="key"`. Language is remembered in `localStorage` and toggled
 live. **New UI strings must be added to BOTH dictionaries** or the key shows
 literally.
 
+As of feature 015, translations can also be overridden server-side: the
+`translations` table (migration 030) is merged over the embedded dictionary on
+boot via `GET /api/translations?locale=`; seed it with
+`node database/seeds/seed-translations.js`. Storefronts default to their
+`restaurant_settings.storefront_language`; `?lang=ar|en` overrides on both `/`
+and `/restaurant/:slug`. SEO metadata per business comes from
+`GET /api/seo/business/:slug` (`server/services/seo.service.js`), hero images
+from `business_hero_images` (migration 031, max 6 per business).
+
 ---
 
 ## 9. Configuration & deployment

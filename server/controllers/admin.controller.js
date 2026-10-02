@@ -277,6 +277,11 @@ const uploadImage = [
     const id = tenantId(req);
     await persistSavedImage(req);
 
+    if (req.query.type === 'hero') {
+      const row = await restaurants.addHeroImage(id, req.savedImagePublicPath);
+      return res.status(201).json({ path: req.savedImagePublicPath, heroImage: row });
+    }
+
     try {
       if (req.query.type === 'logos') {
         const old = (await settingsService.getOwned(id)).logoPath;
@@ -286,6 +291,11 @@ const uploadImage = [
         const old = (await settingsService.getOwned(id)).coverPath;
         await settingsService.updateOwned(id, { coverPath: req.savedImagePublicPath });
         if (old) await deleteUpload(old);
+        // Also add to hero images carousel (FR-052)
+        const existingHeroes = await restaurants.getHeroImages(id);
+        const isPrimary = existingHeroes.length === 0;
+        const position = existingHeroes.length > 0 ? Math.max(...existingHeroes.map(h => h.position)) + 1 : 0;
+        await restaurants.addHeroImage(id, req.savedImagePublicPath, { isPrimary, position });
       } else {
         // items: attach to an owned menu item
         const itemId = v.assertUuid(req.query.itemId, 'itemId');
@@ -441,6 +451,32 @@ async function saveMyDeliveryGroups(req, res) {
   res.json({ groups });
 }
 
+async function listMyHeroImages(req, res) {
+  res.json({ heroImages: await restaurants.getHeroImages(tenantId(req)) });
+}
+
+async function addMyHeroImage(req, res) {
+  const imagePath = v.validateHeroImagePath(req.body && req.body.imagePath);
+  const row = await restaurants.addHeroImage(tenantId(req), imagePath);
+  res.status(201).json({ heroImage: row });
+}
+
+async function updateMyHeroImage(req, res) {
+  const patch = {};
+  if (req.body && req.body.position !== undefined) patch.position = req.body.position;
+  if (req.body && req.body.isPrimary !== undefined) patch.isPrimary = req.body.isPrimary;
+  if (req.body && req.body.isActive !== undefined) patch.isActive = req.body.isActive;
+  const row = await restaurants.updateHeroImage(tenantId(req), req.params.imageId, patch);
+  if (!row) throw notFound('Hero image not found');
+  res.json({ heroImage: row });
+}
+
+async function removeMyHeroImage(req, res) {
+  const ok = await restaurants.removeHeroImage(tenantId(req), req.params.imageId);
+  if (!ok) throw notFound('Hero image not found');
+  res.status(204).end();
+}
+
 module.exports = {
   tenantId,
   myRestaurant: asyncHandler(myRestaurant),
@@ -460,6 +496,10 @@ module.exports = {
   deleteCategory: asyncHandler(deleteCategory),
   listMyDeliveryGroups: asyncHandler(listMyDeliveryGroups),
   saveMyDeliveryGroups: asyncHandler(saveMyDeliveryGroups),
+  listMyHeroImages: asyncHandler(listMyHeroImages),
+  addMyHeroImage: asyncHandler(addMyHeroImage),
+  updateMyHeroImage: asyncHandler(updateMyHeroImage),
+  removeMyHeroImage: asyncHandler(removeMyHeroImage),
   listItems: asyncHandler(listItems),
   createItem: asyncHandler(createItem),
   updateItem: asyncHandler(updateItem),

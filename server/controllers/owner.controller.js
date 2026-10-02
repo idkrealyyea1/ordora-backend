@@ -596,4 +596,52 @@ module.exports = {
   suspendSubscription: asyncHandler(suspendSubscription),
   reactivateSubscription: asyncHandler(reactivateSubscription),
   listSubscriptionEvents: asyncHandler(listSubscriptionEvents),
+  listHeroImages: asyncHandler(listHeroImages),
+  addHeroImage: asyncHandler(addHeroImage),
+  updateHeroImage: asyncHandler(updateHeroImage),
+  removeHeroImage: asyncHandler(removeHeroImage),
+  listTranslations: asyncHandler(listTranslations),
+  updateTranslation: asyncHandler(updateTranslation),
 };
+
+async function listHeroImages(req, res) {
+  const rows = await restaurants.getHeroImages(req.params.id);
+  res.json({ heroImages: rows });
+}
+
+async function addHeroImage(req, res) {
+  const imagePath = req.savedImagePublicPath || (req.body && req.body.imagePath);
+  if (!imagePath) throw badRequest('No image uploaded');
+  const row = await restaurants.addHeroImage(req.params.id, imagePath);
+  res.status(201).json({ heroImage: row });
+}
+
+async function updateHeroImage(req, res) {
+  const patch = {};
+  if (req.body.position !== undefined) patch.position = req.body.position;
+  if (req.body.isPrimary !== undefined) patch.isPrimary = req.body.isPrimary;
+  if (req.body.isActive !== undefined) patch.isActive = req.body.isActive;
+  const row = await restaurants.updateHeroImage(req.params.id, req.params.imageId, patch);
+  if (!row) throw notFound('Hero image not found');
+  res.json({ heroImage: row });
+}
+
+async function removeHeroImage(req, res) {
+  const ok = await restaurants.removeHeroImage(req.params.id, req.params.imageId);
+  if (!ok) throw notFound('Hero image not found');
+  res.status(204).end();
+}
+
+async function listTranslations(req, res) {
+  const svc = require('../services/translations.service');
+  const rows = await svc.getAllTranslations();
+  res.json({ translations: rows });
+}
+
+async function updateTranslation(req, res) {
+  const svc = require('../services/translations.service');
+  const { locale, value } = req.body;
+  if (!locale || !value) throw badRequest('locale and value are required');
+  const row = await svc.updateTranslation(req.params.key, locale, value);
+  res.json(row);
+}

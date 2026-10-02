@@ -39,8 +39,19 @@
       <a href="/leads.html" class="btn btn-sm" style="background:var(--ink);color:#fff">المبيعات AI</a>
       <a id="offers-link" href="/offers.html" class="btn btn-sm" style="background:var(--primary);color:#fff">العروض $19.99</a>
       <button id="logout-btn" type="button" class="btn btn-outline btn-sm" data-i18n="logout">Log out</button>
+      <button id="nav-burger" type="button" class="btn btn-outline btn-sm" aria-label="Menu" aria-expanded="false">☰</button>
     </div>
   </header>
+
+  <div id="nav-overlay" class="nav-drawer-overlay" hidden></div>
+  <nav id="nav-drawer" class="nav-drawer" aria-label="Sections" hidden>
+    <a href="#pricing-card">Pricing</a>
+    <a href="#requests-card">Requests</a>
+    <a href="#staff-card">Staff</a>
+    <a href="#translations-card">Translations</a>
+    <a href="#delivery-card">Delivery</a>
+    <a href="#restaurants-card">Restaurants</a>
+  </nav>
 
   <main class="container mt-2">
     <div id="overview-zone"></div>
@@ -88,7 +99,7 @@
       <div id="staff-zone"></div>
     </section>
 
-    <section class="card mt-2">
+    <section class="card mt-2" id="delivery-card">
       <h1 class="section-title" data-i18n="deliveryGroupsT">Delivery companies</h1>
       <form id="delivery-form" class="form-row form-row-3 mb-2" novalidate autocomplete="off">
         <input id="dg-name" type="text" data-i18n-placeholder="groupNamePh" placeholder="Company name" maxlength="80" required>
@@ -98,7 +109,14 @@
       <div id="delivery-zone"></div>
     </section>
 
-    <section class="card mt-2">
+    <section class="card mt-2" id="translations-card">
+      <h1 class="section-title">Translations</h1>
+      <p class="muted small">Override platform strings without a deploy. Search a key, edit the value, save.</p>
+      <input id="tr-search" type="text" placeholder="Search key…" maxlength="80" autocomplete="off" class="mb-2">
+      <div id="translations-zone"></div>
+    </section>
+
+    <section class="card mt-2" id="restaurants-card">
       <div class="flex-between mb-2">
         <h1 class="section-title" data-i18n="restaurantsH">Restaurants</h1>
         <div class="flex-between" style="gap:8px">

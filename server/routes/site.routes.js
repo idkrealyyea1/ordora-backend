@@ -27,6 +27,9 @@ Allow: /for-dessert-shops.html
 Allow: /for-cake-shops.html
 Allow: /contact.html
 Disallow: /api/
+Disallow: /login.html
+Disallow: /signup.html
+Disallow: /track
 Disallow: /admin.html
 Disallow: /owner.html
 Disallow: /delivery.html
@@ -63,8 +66,8 @@ router.get('/sitemap.xml', asyncHandler(async (req, res) => {
     ...restaurantUrls.map(u => ({ ...u, priority: '0.6', changefreq: 'weekly' }))
   ];
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map(u=>`  <url><loc>${u.loc}</loc><lastmod>${u.lastmod}</lastmod><changefreq>${u.changefreq||'weekly'}</changefreq><priority>${u.priority||'0.6'}</priority></url>`).join('\n')}
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+${urls.map(u=>`  <url><loc>${u.loc}</loc><lastmod>${u.lastmod}</lastmod><changefreq>${u.changefreq||'weekly'}</changefreq><priority>${u.priority||'0.6'}</priority><xhtml:link rel="alternate" hreflang="ar" href="${u.loc}${u.loc.includes('?')?'&':'?'}lang=ar"/><xhtml:link rel="alternate" hreflang="en" href="${u.loc}${u.loc.includes('?')?'&':'?'}lang=en"/></url>`).join('\n')}
 </urlset>`;
   res.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(xml);
 }));

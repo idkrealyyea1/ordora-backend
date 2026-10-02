@@ -9,5 +9,6 @@ const router = express.Router();
 router.post('/login', authLimiter, auth.login);
 router.post('/logout', auth.logout);
 router.get('/me', auth.me);
+router.put('/language', auth.setLanguage);
 
 module.exports = router;

@@ -109,6 +109,16 @@ Wasmer keeps automatic database backups ≥14 days; Pro includes 1 GB of DB stor
 - Uploads: magic-byte sniffing, MIME allow-list, size cap, random filenames inside fixed dirs, traversal-proof deletes.
 - Rate limits: global API, login, and checkout limiters; JSON error envelope; centralized error handler that hides internals.
 
+## Feature 015 (marketing localization)
+
+- Hero-image carousel per business (`business_hero_images`), manageable from admin Settings and the owner restaurant modal; single image renders static, none falls back to the cover.
+- Storefront menu grid: 1 column below 720px, 2 columns at 720px+; dish cards open an accessible product-detail bottom sheet (focus trap, Escape close) that feeds the existing cart.
+- Hamburger drawer nav on `admin.html`/`owner.html` with capability-aware section filtering.
+- Arabic/English everywhere: `?lang=` honored on `/` and `/restaurant/:slug`, preference persisted (`users.platform_language`, `restaurant_settings.storefront_language`), translations overridable via `translations` table (`GET /api/translations`, owner CRUD at `/api/owner/translations`).
+- Locale-aware formatting: `Intl.NumberFormat`/`Intl.DateTimeFormat` with the active locale in `client/js/api.js`; per-business currency snapshots on orders.
+- SEO: per-business metadata via `GET /api/seo/business/:slug` (Restaurant vs LocalBusiness JSON-LD, no fake ratings), `?lang=` hreflang in page heads and `sitemap.xml`, stricter `robots.txt`, `noindex` on all private pages.
+- Seed translations: `node database/seeds/seed-translations.js`.
+
 ## Known limitations / roadmap
 
 - Uploaded images live on the server filesystem. On ephemeral hosts (e.g. Wasmer Edge) they vanish on redeploy — wire Wasmer Volumes or S3-compatible storage into `server/middleware/upload.js` before relying on it in production.

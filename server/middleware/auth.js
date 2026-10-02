@@ -18,7 +18,7 @@ async function attachUser(req, res, next) {
     const userId = req.session && req.session.userId;
     if (userId) {
       const { rows } = await query(
-        `SELECT u.id, u.role, u.username, u.restaurant_id, u.delivery_group_id,
+        `SELECT u.id, u.role, u.username, u.restaurant_id, u.delivery_group_id, u.platform_language,
                 r.is_active AS restaurant_is_active, r.slug AS restaurant_slug,
                 g.is_active AS delivery_group_is_active
          FROM users u

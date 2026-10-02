@@ -925,3 +925,14 @@ input[type="color"] { width: 52px; height: 38px; padding: 2px; border: 1px solid
   }
   .rest-card, .rest-cover-img { transform: none !important; }
 }
+/* US4 hamburger navigation drawer */
+.nav-drawer-overlay{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.45)}
+.nav-drawer{position:fixed;top:0;bottom:0;inset-inline-start:0;z-index:81;width:min(280px,80vw);background:var(--ink);color:#fff;display:flex;flex-direction:column;gap:4px;padding:18px 12px;transform:translateX(-100%);transition:transform .2s ease;box-shadow:0 0 40px rgba(0,0,0,.3)}
+[dir="rtl"] .nav-drawer{transform:translateX(100%)}
+.nav-drawer.open{transform:translateX(0)}
+.nav-drawer a,.nav-drawer button{color:inherit;background:none;border:0;text-align:inherit;padding:11px 14px;border-radius:11px;font-size:.95rem;font-weight:700;cursor:pointer;text-decoration:none}
+.nav-drawer a:hover,.nav-drawer button:hover{background:rgba(255,255,255,.12)}
+#nav-burger{display:none}
+@media (max-width: 899px){#nav-burger{display:inline-flex}.tabs-mobile{display:none}}
+body.drawer-open{overflow:hidden}
+@media (prefers-reduced-motion: reduce){.nav-drawer{transition:none}}

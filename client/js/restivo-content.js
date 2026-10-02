@@ -119,6 +119,10 @@ export const copy = {
       body: 'قدّم قائمتك بوضوح، واجعل إرسال الطلب أسهل من أول نظرة.',
       request: 'أنشئ صفحة مطعمك',
     },
+    trust: {
+      eyebrow: 'ليش Restivo',
+      items: ['طلبات واتساب مباشرة — بلا تطبيق للزبون', 'منيو عربي وإنجليزي بثيم مطعمك', 'بدون عمولة على الطلبات'],
+    },
     footer: {
       a: 'منيو إلكتروني وطلبات أوضح',
       b: 'مصممة للمطاعم المستقلة.',
@@ -261,6 +265,10 @@ export const copy = {
       titleB: 'Ordering made easier.',
       body: 'Present your menu clearly and give guests an easier way to send their order.',
       request: 'Create your restaurant page',
+    },
+    trust: {
+      eyebrow: 'Why Restivo',
+      items: ['WhatsApp orders — no app needed for guests', 'Arabic and English menu with your brand theme', 'No commission on orders'],
     },
     footer: {
       a: 'Digital menus and clearer orders',

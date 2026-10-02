@@ -25,6 +25,7 @@ function toPublicSettings(row) {
     deliveryFeeCents: row.delivery_fee_cents,
     deliveryEnabled: row.delivery_enabled !== false,
     ignoreOpeningHours: row.ignore_opening_hours,
+    storefrontLanguage: row.storefront_language || 'ar',
   };
 }
 
@@ -52,6 +53,7 @@ const FIELD_COLUMNS = {
   deliveryFeeCents: 'delivery_fee_cents',
   deliveryEnabled: 'delivery_enabled',
   ignoreOpeningHours: 'ignore_opening_hours',
+  storefrontLanguage: 'storefront_language',
 };
 
 async function updateOwned(restaurantId, patch) {

@@ -3,17 +3,18 @@ const { query } = require('../db/pool');
 
 async function getPricing() {
   try {
-    const { rows } = await query('SELECT pricing_cents, pricing_currency, pricing_period, trial_days, brand_name FROM platform_settings WHERE id=1');
-    if (!rows[0]) return { pricing_cents: 1999, pricing_currency: 'USD', pricing_period: 'month', trial_days: 7, brand_name: 'Restivo' };
+    const { rows } = await query('SELECT pricing_cents, pricing_currency, pricing_period, trial_days, brand_name, max_hero_images FROM platform_settings WHERE id=1');
+    if (!rows[0]) return { pricing_cents: 1999, pricing_currency: 'USD', pricing_period: 'month', trial_days: 7, brand_name: 'Restivo', max_hero_images: 6 };
     return {
       pricing_cents: rows[0].pricing_cents,
       pricing_currency: rows[0].pricing_currency,
       pricing_period: rows[0].pricing_period,
       trial_days: rows[0].trial_days,
       brand_name: rows[0].brand_name,
+      max_hero_images: rows[0].max_hero_images ?? 6,
     };
   } catch (_) {
-    return { pricing_cents: 1999, pricing_currency: 'USD', pricing_period: 'month', trial_days: 7, brand_name: 'Restivo' };
+    return { pricing_cents: 1999, pricing_currency: 'USD', pricing_period: 'month', trial_days: 7, brand_name: 'Restivo', max_hero_images: 6 };
   }
 }
 

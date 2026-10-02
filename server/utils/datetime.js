@@ -8,6 +8,7 @@
 const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 const tzCache = new Map();
+const tzWarned = new Set();
 
 function isValidTimezone(tz) {
   if (typeof tz !== 'string' || tz.length === 0 || tz.length > 64) return false;
@@ -20,6 +21,16 @@ function isValidTimezone(tz) {
   }
   tzCache.set(tz, ok);
   return ok;
+}
+
+/** Returns a valid IANA timezone or 'UTC', logging a warning on first invalid input. */
+function resolveTimezone(tz) {
+  if (isValidTimezone(tz)) return tz;
+  if (!tzWarned.has(tz)) {
+    console.warn('[datetime] Invalid timezone "' + tz + '", falling back to UTC');
+    tzWarned.add(tz);
+  }
+  return 'UTC';
 }
 
 /** Accepts either a "HH:MM[:SS]" string or a pg-parsed Date; returns minutes since midnight. */
@@ -69,8 +80,8 @@ function localDayAndMinutes(date, timeZone) {
  */
 function isOpenNow(hoursRows, timeZone, now = new Date()) {
   if (!Array.isArray(hoursRows) || hoursRows.length === 0) return false;
-  if (!isValidTimezone(timeZone)) return false;
-  const cur = localDayAndMinutes(now, timeZone);
+  const validTz = resolveTimezone(timeZone);
+  const cur = localDayAndMinutes(now, validTz);
   if (!cur) return false;
 
   for (let offset = 0; offset <= 1; offset++) {
@@ -91,4 +102,4 @@ function isOpenNow(hoursRows, timeZone, now = new Date()) {
   return false;
 }
 
-module.exports = { isValidTimezone, timeToMinutes, timeToHhmm, localDayAndMinutes, isOpenNow };
+module.exports = { isValidTimezone, timeToMinutes, timeToHhmm, localDayAndMinutes, isOpenNow, resolveTimezone };

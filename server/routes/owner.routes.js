@@ -60,4 +60,14 @@ router.get('/restaurant-requests', requireOwner, owner.listRestaurantRequests);
 router.patch('/restaurant-requests/:id', requireOwner, owner.updateRestaurantRequestStatus);
 router.delete('/restaurant-requests/:id', requireOwner, owner.deleteRestaurantRequest);
 
+// Hero image management
+router.get('/restaurants/:id/hero-images', requireOwner, owner.listHeroImages);
+router.post('/restaurants/:id/hero-images', requireOwner, owner.addHeroImage);
+router.patch('/restaurants/:id/hero-images/:imageId', requireOwner, owner.updateHeroImage);
+router.delete('/restaurants/:id/hero-images/:imageId', requireOwner, owner.removeHeroImage);
+
+// Translation management
+router.get('/translations', requireOwner, owner.listTranslations);
+router.put('/translations/:key', requireOwner, owner.updateTranslation);
+
 module.exports = router;

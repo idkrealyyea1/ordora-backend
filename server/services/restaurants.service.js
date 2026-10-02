@@ -5,7 +5,7 @@
  */
 
 const { query, withTx } = require('../db/pool');
-const { conflict, notFound } = require('../utils/errors');
+const { conflict, notFound, badRequest } = require('../utils/errors');
 const { isOpenNow, timeToHhmm } = require('../utils/datetime');
 // Keep revenue semantics identical to orders.service (confirmed+ only).
 const { REVENUE_SQL } = require('./orders.service');
@@ -204,6 +204,8 @@ async function getPublicView(slug) {
   );
   for (const item of items) item.options = optionDefs.get(item.id) || [];
 
+  const heroImages = await getHeroImages(restaurant.id);
+
   const openNow =
     restaurant.status === 'open' &&
     (settings.ignore_opening_hours || isOpenNow(hours, settings.timezone));
@@ -231,7 +233,9 @@ async function getPublicView(slug) {
       currency: settings.currency.toUpperCase(),
       deliveryFeeCents: settings.delivery_fee_cents,
       deliveryEnabled: settings.delivery_enabled !== false,
+      storefrontLanguage: settings.storefront_language || 'ar',
     },
+    heroImages: heroImages.map((h) => ({ imagePath: h.image_path, position: h.position, isPrimary: h.is_primary })),
     hours: hours.map((h) => ({
       day: h.day_of_week,
       closed: h.is_closed,
@@ -424,6 +428,73 @@ async function assertExists(id) {
   return row;
 }
 
+async function getHeroImages(businessId) {
+  const { rows } = await query(
+    'SELECT id, image_path, position, is_primary, is_active FROM business_hero_images WHERE business_id = $1 AND is_active = true ORDER BY position',
+    [businessId]
+  );
+  return rows;
+}
+
+async function getHeroImagesForSlug(slug) {
+  const { rows } = await query(
+    `SELECT h.id, h.image_path, h.position, h.is_primary
+     FROM business_hero_images h
+     JOIN restaurants r ON r.id = h.business_id
+     WHERE r.slug = $1 AND h.is_active = true
+     ORDER BY h.position`,
+    [slug]
+  );
+  return rows;
+}
+
+async function addHeroImage(businessId, imagePath, options) {
+  const { rows: cnt } = await query('SELECT COUNT(*)::int AS n FROM business_hero_images WHERE business_id = $1 AND is_active = true', [businessId]);
+  const platform = require('./platform.service');
+  const { max_hero_images } = await platform.getPricing();
+  const maxHero = max_hero_images ?? 6;
+  if (cnt[0].n >= maxHero) throw badRequest('Maximum ' + maxHero + ' hero images');
+  const isPrimary = (options && options.isPrimary) !== undefined ? options.isPrimary : (cnt[0].n === 0);
+  if (isPrimary) {
+    await query('UPDATE business_hero_images SET is_primary = false WHERE business_id = $1', [businessId]);
+  }
+  const position = (options && options.position) !== undefined ? options.position : (cnt[0].n > 0 ? Math.max(...(await query('SELECT position FROM business_hero_images WHERE business_id = $1 AND is_active = true', [businessId])).rows.map(r => r.position)) + 1 : 0);
+  const { rows } = await query(
+    `INSERT INTO business_hero_images (business_id, image_path, position, is_primary, is_active)
+     VALUES ($1, $2, $3, $4, true)
+     RETURNING *`,
+    [businessId, imagePath, position, isPrimary]
+  );
+  return rows[0];
+}
+
+async function updateHeroImage(businessId, imageId, patch) {
+  const sets = [];
+  const params = [businessId, imageId];
+  if (patch.position !== undefined) { params.push(patch.position); sets.push(`position = $${params.length}`); }
+  if (patch.isPrimary !== undefined) {
+    if (patch.isPrimary) {
+      await query('UPDATE business_hero_images SET is_primary = false WHERE business_id = $1', [businessId]);
+    }
+    params.push(patch.isPrimary); sets.push(`is_primary = $${params.length}`);
+  }
+  if (patch.isActive !== undefined) { params.push(patch.isActive); sets.push(`is_active = $${params.length}`); }
+  if (sets.length === 0) return null;
+  const { rows } = await query(
+    `UPDATE business_hero_images SET ${sets.join(', ')} WHERE business_id = $1 AND id = $2 RETURNING *`,
+    params
+  );
+  return rows[0] || null;
+}
+
+async function removeHeroImage(businessId, imageId) {
+  const { rowCount } = await query(
+    'UPDATE business_hero_images SET is_active = false WHERE business_id = $1 AND id = $2',
+    [businessId, imageId]
+  );
+  return rowCount > 0;
+}
+
 module.exports = {
   slugExists,
   createRestaurant,
@@ -442,4 +513,9 @@ module.exports = {
   ownerStats,
   platformOverview,
   reportSummaryForOwner,
+  getHeroImages,
+  getHeroImagesForSlug,
+  addHeroImage,
+  updateHeroImage,
+  removeHeroImage,
 };

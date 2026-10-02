@@ -4,6 +4,11 @@ const FOOD = '/images/restivo-food-table.jpg';
 const OWNER = '/images/restivo-owner-tablet.jpg';
 let lang = 'ar';
 let mobileOpen = false;
+let priceLabel = '$19.99';
+try {
+  const qLang = new URLSearchParams(location.search).get('lang');
+  lang = (qLang === 'en' || qLang === 'ar') ? qLang : (localStorage.getItem('restivo-lang') || 'ar');
+} catch (_) { /* default ar */ }
 let modalOpen = false;
 let liveOpen = false;
 let faqOpen = 0;
@@ -29,6 +34,19 @@ function renderLanding() {
   document.querySelector('meta[property="og:description"]')?.setAttribute('content', t.seo.description);
   document.querySelector('meta[name="twitter:title"]')?.setAttribute('content', pageTitle);
   document.querySelector('meta[name="twitter:description"]')?.setAttribute('content', t.seo.description);
+  (function () {
+    const origin = location.origin;
+    const mk = (selector, make) => { let el = document.head.querySelector(selector); if (!el) { el = make(); document.head.appendChild(el); } return el; };
+    mk('link[rel="canonical"]', () => { const l = document.createElement('link'); l.rel = 'canonical'; return l; }).href = origin + '/';
+    const ogUrl = mk('meta[property="og:url"]', () => { const m = document.createElement('meta'); m.setAttribute('property', 'og:url'); return m; });
+    ogUrl.content = origin + '/';
+    const setAlt = (hreflang) => {
+      const sel = `link[rel="alternate"][hreflang="${hreflang}"]`;
+      const el = mk(sel, () => { const l = document.createElement('link'); l.rel = 'alternate'; l.setAttribute('hreflang', hreflang); return l; });
+      el.href = origin + '/?lang=' + (hreflang === 'x-default' ? 'ar' : hreflang);
+    };
+    setAlt('ar'); setAlt('en'); setAlt('x-default');
+  })();
   document.querySelector('#app').innerHTML = `
     <div id="top" class="noise">
       <header class="site-header"><div class="wrap header-row">${logo()}<div class="mobile-language">${languageToggle()}</div>
@@ -41,13 +59,14 @@ function renderLanding() {
           <div class="hero-grid"><div class="hero-copy reveal"><span class="badge"><i></i>${t.hero.badge}<b>/</b> Restivo</span><h1>${t.hero.titleA} <span class="accent">${t.hero.titleB}</span></h1><p class="hero-desc">${t.hero.description}</p><div class="hero-actions"><button class="dark-btn" data-action="live">${t.hero.try} ${arrow()}</button><span class="cue-arrow" aria-hidden="true"><svg viewBox="0 0 72 44"><g transform="translate(3.5,3.5)" fill="none" stroke="#f5c84b" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path class="draw" pathLength="100" d="M62 6 C 44 8, 28 16, 14 31"/><path class="draw2" pathLength="100" d="M24 24 L13 32 L25 36"/></g><g fill="none" stroke="#ed6b4c" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path class="draw" pathLength="100" d="M62 6 C 44 8, 28 16, 14 31"/><path class="draw2" pathLength="100" d="M24 24 L13 32 L25 36"/></g></svg></span><button class="text-btn" data-action="request">${t.hero.request} ${arrow()}</button><a class="text-btn" href="/signup.html">${t.hero.startTrial} ${arrow()}</a></div><div class="proof"><div class="avatars"><b>س</b><b>م</b><b>ر</b></div><p>${t.hero.proof}<br><strong>${t.hero.proofStrong}</strong></p></div></div><div class="reveal delay">${phonePreview(t)}</div></div>
         </div></section>
         <section class="ticker" aria-label="highlights"><div class="ticker-track">${[...t.ticker, ...t.ticker].map((x, i) => `<span${i >= t.ticker.length ? ' aria-hidden="true"' : ''}>✦ ${x}</span>`).join('')}</div></section>
-        <section id="pricing" class="pricing"><div class="wrap pricing-grid"><div><span class="eyebrow yellow-eyebrow">${t.pricing.eyebrow}</span><h2 class="section-title">${t.pricing.titleA}<br><span style="color:var(--yellow)">${t.pricing.titleB}</span></h2><p class="section-body on-dark">${t.pricing.body}</p></div><div class="pricing-card"><p class="pricing-label">${t.pricing.label}</p><div class="price"><strong>$19.99</strong><span>${t.pricing.month}</span></div><p class="trial-note">✓ ${t.pricing.trial}</p><div class="offer-note"><strong>${t.hero.stripTitle}</strong><span>${t.hero.stripSub}</span></div><div class="rule"></div><ul class="price-features">${t.pricing.features.map(x=>`<li>${x}</li>`).join('')}</ul><button class="coral-btn" data-action="request">${t.pricing.request} ${arrow()}</button></div></div></section>
+        <section id="pricing" class="pricing"><div class="wrap pricing-grid"><div><span class="eyebrow yellow-eyebrow">${t.pricing.eyebrow}</span><h2 class="section-title">${t.pricing.titleA}<br><span style="color:var(--yellow)">${t.pricing.titleB}</span></h2><p class="section-body on-dark">${t.pricing.body}</p></div><div class="pricing-card"><p class="pricing-label">${t.pricing.label}</p><div class="price"><strong>${priceLabel}</strong><span>${t.pricing.month}</span></div><p class="trial-note">✓ ${t.pricing.trial}</p><div class="offer-note"><strong>${t.hero.stripTitle}</strong><span>${t.hero.stripSub}</span></div><div class="rule"></div><ul class="price-features">${t.pricing.features.map(x=>`<li>${x}</li>`).join('')}</ul><button class="coral-btn" data-action="request">${t.pricing.request} ${arrow()}</button></div></div></section>
         <section class="story"><div class="wrap story-grid"><div class="story-art"><figure class="food-card"><img src="${FOOD}" alt="${t.story.tag}"><figcaption class="food-label">${t.story.tag}</figcaption></figure><figure class="owner-card"><img src="${OWNER}" alt="${t.story.owner}"><figcaption>${t.story.owner}</figcaption></figure></div><div><span class="eyebrow">${t.story.eyebrow}</span><h2 class="section-title">${t.story.titleA}<br><span class="teal-text">${t.story.titleB}</span></h2><p class="section-body">${t.story.body}</p><div class="owner-note"><b>01</b>${t.story.ownerNote}</div></div></div></section>
         <section id="how-it-works" class="how"><div class="wrap"><div class="section-intro"><div><span class="eyebrow">${t.how.eyebrow}</span><h2 class="section-title">${t.how.titleA}<br><span class="teal-text">${t.how.titleB}</span></h2></div><p class="section-body">${t.how.body}</p></div><div class="steps">${steps[lang].map((s,i)=>`<article class="step"><div class="step-head"><span>0${i+1}</span><span class="step-icon">${s[0]}</span></div><h3>${s[1]}</h3><p>${s[2]}</p></article>`).join('')}</div></div></section>
         <section id="features" class="features"><div class="wrap"><div class="features-head"><div><span class="eyebrow">${t.features.eyebrow}</span><h2 class="section-title">${t.features.titleA}<br><span class="accent">${t.features.titleB}</span></h2></div><p class="aside">${t.features.aside}</p></div><div class="feature-grid">${features.map((f)=>`<article class="feature ${f.tone}"><div class="feature-head"><span>${f.n}</span><span class="feature-icon">${f.icon}</span></div><div class="feature-copy"><h3>${f[lang].title}</h3><p>${f[lang].body}</p></div></article>`).join('')}</div></div></section>
         <section class="family"><div class="wrap"><span class="eyebrow">${t.family.eyebrow}</span><h2 class="section-title">${t.family.titleA}<br><span class="teal-text">${t.family.titleB}</span></h2><p class="section-body">${t.family.body}</p><div class="family-grid" id="family-grid"></div><div class="family-cta"><a class="dark-btn" href="/app/">${t.family.cta} ${arrow()}</a></div></div></section>
         <section class="dashboard"><div class="wrap dashboard-grid"><div><span class="eyebrow yellow-eyebrow">${t.dashboard.eyebrow}</span><h2 class="section-title">${t.dashboard.titleA}<br><span style="color:var(--yellow)">${t.dashboard.titleB}</span></h2><p class="section-body on-dark">${t.dashboard.body}</p><div class="chips">${t.dashboard.chips.map((c)=>`<span class="chip"><b>✓</b>${c}</span>`).join('')}</div></div><div class="dashboard-panel"><div class="panel"><div class="panel-top"><div><small>${t.dashboard.label}</small><h4>${t.dashboard.date}</h4></div><span class="panel-mark">▥</span></div><div class="stats"><div class="stat"><p>${t.dashboard.today}</p><strong>47</strong><small>${t.dashboard.yesterday}</small></div><div class="stat gold"><p>${t.dashboard.top}</p><strong style="font-size:15px">${t.dashboard.topItem}</strong><small>${t.dashboard.topCount}</small></div></div><div class="orders"><div class="order-line"><span>#1042　${lang==='ar'?'برجر سموكي × 2':'Smoky burger × 2'}</span><span>${t.dashboard.new}</span></div><div class="order-line"><span>#1041　${lang==='ar'?'ليمون ونعناع × 1':'Lemon mint × 1'}</span><span>${t.dashboard.done}</span></div><div class="order-line"><span>#1040　${lang==='ar'?'وجبة بَسْطة × 3':'Basta meal × 3'}</span><span>${t.dashboard.done}</span></div></div></div></div></div></section>
         <section id="faq" class="faq"><div class="wrap faq-inner"><div class="faq-head"><span class="eyebrow">${t.faq.eyebrow}</span><h2 class="section-title">${t.faq.title}</h2></div><div class="faq-list">${faqs[lang].map((f,i)=>`<article class="faq-item ${faqOpen===i?'open':''}"><button class="faq-q" data-faq="${i}" aria-expanded="${faqOpen===i}"><span>${f[0]}</span><b>${faqOpen===i?'−':'+'}</b></button><p class="faq-a">${f[1]}</p></article>`).join('')}</div></div></section>
+        <section class="trust"><div class="wrap"><span class="eyebrow">${t.trust.eyebrow}</span><ul>${t.trust.items.map((x) => `<li>✓ ${x}</li>`).join('')}</ul></div></section>
         <section class="final"><span class="eyebrow">✦</span><h2>${t.final.titleA}<br>${t.final.titleB}</h2><p>${t.final.body}</p><button class="dark-btn" data-action="request">${t.final.request} ${arrow()}</button></section>
       </main>
       <footer class="footer"><div class="wrap footer-row"><div>${logo(true)}<p>${t.footer.a}<br>${t.footer.b}</p></div><div class="footer-links"><a href="#features">${t.nav.features}</a><a href="#pricing">${t.nav.pricing}</a><button data-action="live">${t.hero.try}</button><a href="/login.html" style="opacity:.7">${lang === 'ar' ? 'دخول' : 'Login'}</a><span>© Restivo</span></div></div></footer>
@@ -107,7 +126,7 @@ function phonePreview(t) {
 }
 
 function bindLanding() {
-  document.querySelectorAll('[data-lang]').forEach((b)=>b.addEventListener('click',()=>{lang=b.dataset.lang;mobileOpen=false;renderLanding()}));
+  document.querySelectorAll('[data-lang]').forEach((b)=>b.addEventListener('click',()=>{lang=b.dataset.lang;try{localStorage.setItem('restivo-lang',lang)}catch(_){}mobileOpen=false;renderLanding()}));
   document.querySelectorAll('[data-action="mobile"]').forEach((b)=>b.addEventListener('click',()=>{mobileOpen=!mobileOpen;renderLanding()}));
   document.querySelectorAll('[data-action="live"]').forEach((b)=>b.addEventListener('click',openLive));
   document.querySelectorAll('[data-action="request"]').forEach((b)=>b.addEventListener('click',openRequest));
@@ -228,5 +247,14 @@ function bindLive(t){
 }
 function changeCart(id,delta){const next=Math.max(0,(liveState.cart[id]||0)+delta);if(next)liveState.cart[id]=next;else delete liveState.cart[id];liveState.cartOpen=false;document.querySelector('.live-backdrop')?.remove();renderLive()}
 async function shareMenu(){try{if(navigator.share)await navigator.share({title:'Restivo',text:liveText[lang].menu,url:location.href});else{await navigator.clipboard?.writeText(location.href);liveState.notice=liveText[lang].copied;document.querySelector('.live-backdrop')?.remove();renderLive();setTimeout(()=>{liveState.notice='';document.querySelector('.live-backdrop')?.remove();renderLive()},2200)}}catch{}}
+
+fetch('/api/pricing').then(r => r.ok ? r.json() : null).then(d => {
+  if (d && d.pricing && typeof d.pricing.pricing_cents === 'number') {
+    try {
+      priceLabel = new Intl.NumberFormat(document.documentElement.lang || undefined, { style: 'currency', currency: d.pricing.pricing_currency || 'USD' }).format(d.pricing.pricing_cents / 100);
+    } catch (_) { priceLabel = '$' + (d.pricing.pricing_cents / 100).toFixed(2); }
+    renderLanding();
+  }
+}).catch(() => {});
 
 renderLanding();

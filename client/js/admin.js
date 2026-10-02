@@ -137,10 +137,57 @@
       : '<span class="badge badge-closed">' + esc(info.restaurant.status === 'temporarily_closed' ? I.t('tempClosedBadge') : I.t('closedBadge')) + '</span>';
   }
 
+  function initDrawer() {
+    const burger = document.getElementById('nav-burger');
+    const drawer = document.getElementById('nav-drawer');
+    const overlay = document.getElementById('nav-overlay');
+    if (!burger || !drawer) return;
+    // Mirror side links into the drawer so both stay in sync.
+    for (const btn of document.querySelectorAll('.dash-side [data-tab]')) {
+      const b = btn.cloneNode(true);
+      b.classList.remove('active');
+      b.addEventListener('click', () => { closeDrawer(); switchTab(btn.dataset.tab); });
+      drawer.appendChild(b);
+    }
+    function openDrawer() {
+      drawer.hidden = false; overlay.hidden = false;
+      requestAnimationFrame(() => drawer.classList.add('open'));
+      document.body.classList.add('drawer-open');
+      burger.setAttribute('aria-expanded', 'true');
+    }
+    function closeDrawer() {
+      drawer.classList.remove('open');
+      overlay.hidden = true;
+      document.body.classList.remove('drawer-open');
+      burger.setAttribute('aria-expanded', 'false');
+      setTimeout(() => { if (!drawer.classList.contains('open')) drawer.hidden = true; }, 200);
+    }
+    burger.addEventListener('click', () => (drawer.classList.contains('open') ? closeDrawer() : openDrawer()));
+    overlay.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && drawer.classList.contains('open')) closeDrawer(); });
+    window.addEventListener('resize', () => { if (window.innerWidth >= 900) closeDrawer(); });
+
+    // Capability-aware visibility: hide nav entries for disabled capabilities.
+    api.get('/api/onboarding/capabilities').then((caps) => {
+      const enabled = (caps && caps.capabilities) || {};
+      document.querySelectorAll('[data-cap]').forEach((el) => {
+        const key = el.dataset.cap;
+        if (key === '__always') return;
+        if (enabled[key] === false) el.style.display = 'none';
+      });
+      drawer.querySelectorAll('[data-cap]').forEach((el) => {
+        const key = el.dataset.cap;
+        if (key === '__always') return;
+        if (enabled[key] === false) el.remove();
+      });
+    }).catch(() => { /* no tenant → keep all visible */ });
+  }
+
   function bindChrome() {
     document.querySelectorAll('[data-tab]').forEach((btn) => {
       btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
+    initDrawer();
     document.getElementById('logout-btn').addEventListener('click', async () => {
       await api.post('/api/auth/logout').catch(() => {});
       location.href = '/login.html';
@@ -1229,6 +1276,12 @@
             : '<p class="hint muted small">' + esc(I.t('noGroupsForSelection')) + '</p>') +
         '</section>' +
 
+        '<section class="card"><h2>' + esc(I.t('heroImages')) + '</h2>' +
+          '<div id="hero-list" class="muted small">Loading…</div>' +
+          '<input id="hero-file" type="file" accept="image/jpeg,image/png,image/webp">' +
+          '<button id="hero-upload-btn" type="button" class="btn btn-outline btn-sm mt-1">' + esc(I.t('uploadHeroImage')) + '</button>' +
+        '</section>' +
+
         '<section class="card"><h2>' + esc(I.t('hoursS')) + '</h2>' +
           '<div class="table-wrap"><table class="data hours-table" id="hours-table"><tbody>' +
           DAY_KEYS.map((key, idx) => {
@@ -1247,6 +1300,8 @@
 
       document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
       loadPushCard();
+      loadHeroList();
+      document.getElementById('hero-upload-btn').addEventListener('click', uploadHero);
 
       const c1 = document.getElementById('st-color1');
       const c2 = document.getElementById('st-color2');
@@ -1365,6 +1420,45 @@
     } catch (err) {
       toast(err.message, 'error');
     }
+  }
+
+  async function loadHeroList() {
+    const zone = document.getElementById('hero-list');
+    if (!zone) return;
+    try {
+      const { heroImages } = await api.get('/api/admin/hero-images');
+      if (!heroImages.length) { zone.textContent = esc(I.t('noHeroImages')); return; }
+      zone.innerHTML = heroImages.map((h) =>
+        '<div class="flex-between mb-1" style="align-items:center" data-hero-id="' + esc(h.id) + '">' +
+        '<img src="' + esc(h.image_path) + '" alt="" width="72" height="40" style="object-fit:cover;border-radius:8px">' +
+        '<span class="small">' + (h.is_primary ? '★ primary' : '') + ' #' + h.position + '</span>' +
+        (h.is_primary ? '' : '<button type="button" class="btn btn-outline btn-sm" data-hero-primary>Primary</button>') +
+        '<button type="button" class="btn btn-outline btn-sm" data-hero-remove>Remove</button></div>'
+      ).join('');
+      zone.querySelectorAll('[data-hero-primary]').forEach((b) => b.addEventListener('click', async () => {
+        const id = b.closest('[data-hero-id]').dataset.heroId;
+        await api.request('/api/admin/hero-images/' + id, { method: 'PATCH', body: { isPrimary: true } });
+        loadHeroList();
+      }));
+      zone.querySelectorAll('[data-hero-remove]').forEach((b) => b.addEventListener('click', async () => {
+        const id = b.closest('[data-hero-id]').dataset.heroId;
+        await api.request('/api/admin/hero-images/' + id, { method: 'DELETE' });
+        loadHeroList();
+      }));
+    } catch (err) { zone.textContent = err.message; }
+  }
+
+  async function uploadHero() {
+    const f = document.getElementById('hero-file').files[0];
+    if (!f) return toast('Choose an image first', 'error');
+    const optimized = await App.compressImage(f, { max: 1600, quality: 0.75 });
+    const fd = new FormData();
+    fd.append('image', optimized, 'hero.webp');
+    try {
+      await api.request('/api/admin/images?type=hero', { method: 'POST', body: fd });
+      document.getElementById('hero-file').value = '';
+      loadHeroList();
+    } catch (err) { toast(err.message, 'error'); }
   }
 
   async function uploadSettingImage(file, type) {

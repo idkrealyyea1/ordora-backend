@@ -75,7 +75,13 @@ router.put('/hours', admin.updateHours);
 router.get('/delivery-groups', admin.listMyDeliveryGroups);
 router.put('/delivery-groups', requireCapability('delivery_groups'), requireCapability('delivery'), admin.saveMyDeliveryGroups);
 
-// Image uploads (?type=logos|covers|items[&itemId=...])
+// Hero images (multi-image storefront carousel)
+router.get('/hero-images', admin.listMyHeroImages);
+router.post('/hero-images', admin.addMyHeroImage);
+router.patch('/hero-images/:imageId', admin.updateMyHeroImage);
+router.delete('/hero-images/:imageId', admin.removeMyHeroImage);
+
+// Image uploads (?type=logos|covers|items[&itemId=...]|hero)
 router.post('/images', ...admin.uploadImage);
 
 module.exports = router;

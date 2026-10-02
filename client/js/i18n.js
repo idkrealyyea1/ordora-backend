@@ -532,6 +532,9 @@
       tpPriceLabel: '٥٫٥٠',
       logoUpload: 'رفع الشعار',
       coverUpload: 'رفع الغلاف',
+      heroImages: 'صور العرض',
+      uploadHeroImage: 'رفع صورة عرض',
+      noHeroImages: 'لا توجد صور عرض بعد — يتم استخدام صورة الغلاف.',
       statusS: 'الحالة',
       restaurantStatusL: 'حالة المطعم',
       stOpen: 'مفتوح — يستقبل الطلبات',
@@ -1218,6 +1221,9 @@
       tpPriceLabel: '$5.50',
       logoUpload: 'Logo upload',
       coverUpload: 'Cover upload',
+      heroImages: 'Hero images',
+      uploadHeroImage: 'Upload hero image',
+      noHeroImages: 'No hero images yet — the cover image is used.',
       statusS: 'Status',
       restaurantStatusL: 'Restaurant status',
       stOpen: 'Open — accepting orders',
@@ -1428,6 +1434,13 @@
   function setLang(next) {
     lang = next === 'en' ? 'en' : 'ar';
     try { localStorage.setItem(STORE_KEY, lang); } catch (_) { /* ignore */ }
+    try {
+      fetch('/api/auth/language', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locale: lang }),
+      }).catch(() => {});
+    } catch (_) { /* anonymous pages */ }
     apply();
     listeners.forEach((fn) => { try { fn(); } catch (_) { /* one bad listener must not kill the rest */ } });
   }
@@ -1459,8 +1472,31 @@
     setLang,
     onChange(fn) { listeners.push(fn); },
     get lang() { return lang; },
+    async fetchTranslations(nextLang) {
+      try {
+        const res = await fetch('/api/translations?locale=' + encodeURIComponent(nextLang));
+        if (res.ok) {
+          const data = await res.json();
+          if (data.translations) {
+            DICT[nextLang] = Object.assign({}, DICT[nextLang], data.translations);
+          }
+        }
+      } catch (_) { /* fall back to embedded dictionary */ }
+    },
   };
+
+  setLang = (function (orig) {
+    return function (next) {
+      orig(next);
+      window.I18N.fetchTranslations(lang).then(() => apply());
+    };
+  })(setLang);
 
   injectToggle();
   apply();
+  window.I18N.fetchTranslations(lang).then(() => apply());
+  fetch('/api/auth/me').then((r) => r.ok ? r.json() : null).then((d) => {
+    const srv = d && d.user && d.user.platformLanguage;
+    if (srv && srv !== lang) setLang(srv);
+  }).catch(() => {});
 })();

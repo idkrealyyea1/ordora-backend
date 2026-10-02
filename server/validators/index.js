@@ -217,6 +217,7 @@ function validateSettingsUpdate(body = {}) {
   }
   if (body.ignoreOpeningHours !== undefined) patch.ignoreOpeningHours = toBool(body.ignoreOpeningHours, 'ignoreOpeningHours');
   if (body.deliveryEnabled !== undefined) patch.deliveryEnabled = toBool(body.deliveryEnabled, 'deliveryEnabled');
+  if (body.storefrontLanguage !== undefined) patch.storefrontLanguage = validateLocale(body.storefrontLanguage);
   if (Object.keys(patch).length === 0) throw badRequest('No updatable fields provided');
   return patch;
 }
@@ -763,4 +764,21 @@ module.exports = {
   validateSubscriptionSuspend,
   validateSubscriptionReason,
   assertUuid,
+  validateLocale,
+  validateHeroImagePath,
 };
+
+function validateLocale(value) {
+  const locale = String(value || '').trim().toLowerCase();
+  if (!['ar', 'en'].includes(locale)) {
+    throw badRequest('locale must be "ar" or "en"', [{ field: 'locale' }]);
+  }
+  return locale;
+}
+
+function validateHeroImagePath(value) {
+  if (typeof value !== 'string' || !/^\/uploads\/covers\/[0-9a-f-]{36}\.(jpg|png|webp)$/.test(value)) {
+    throw badRequest('imagePath is invalid', [{ field: 'imagePath' }]);
+  }
+  return value;
+}
