@@ -39,9 +39,9 @@ CREATE TRIGGER trg_hero_images_updated BEFORE UPDATE ON business_hero_images
 -- Migrate existing cover_path to hero image records
 DO $$
 DECLARE
-  r RECORD;
+  rec RECORD;
 BEGIN
-  FOR r IN
+  FOR rec IN
     SELECT r.id, s.cover_path
     FROM restaurants r
     JOIN restaurant_settings s ON s.restaurant_id = r.id
@@ -51,7 +51,7 @@ BEGIN
       )
   LOOP
     INSERT INTO business_hero_images (business_id, image_path, position, is_primary, is_active)
-    VALUES (r.id, r.cover_path, 0, true, true);
+    VALUES (rec.id, rec.cover_path, 0, true, true);
   END LOOP;
 END
 $$;
