@@ -181,7 +181,7 @@ async function createCheckout({ restaurantId, payload }) {
     const restRes = await client.query(
       `SELECT r.id, r.is_active, r.status,
               s.timezone, s.delivery_fee_cents, s.delivery_enabled, s.ignore_opening_hours,
-              s.currency
+              s.currency, s.free_delivery_enabled, s.free_delivery_threshold_cents
        FROM restaurants r
        JOIN restaurant_settings s ON s.restaurant_id = r.id
        WHERE r.id = $1
@@ -281,8 +281,15 @@ async function createCheckout({ restaurantId, payload }) {
       });
     }
 
+    // Server-authoritative delivery fee. Optional free-delivery threshold:
+    // delivery orders whose server-computed subtotal reaches the business
+    // threshold ship free. Pickup never carries a fee. Client values ignored.
+    const freeShip =
+      payload.orderType === 'delivery' &&
+      rest.free_delivery_enabled === true &&
+      subtotal >= Number(rest.free_delivery_threshold_cents || 0);
     const deliveryFee =
-      payload.orderType === 'delivery' ? Number(rest.delivery_fee_cents || 0) : 0;
+      payload.orderType === 'delivery' && !freeShip ? Number(rest.delivery_fee_cents || 0) : 0;
     const total = subtotal + deliveryFee;
 
     // Idempotent retry: a repeated submission of the same customer intent

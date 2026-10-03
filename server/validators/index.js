@@ -215,6 +215,10 @@ function validateSettingsUpdate(body = {}) {
   if (body.deliveryFeeCents !== undefined) {
     patch.deliveryFeeCents = toIntInRange(body.deliveryFeeCents, 'deliveryFeeCents', { min: 0, max: 1000000 });
   }
+  if (body.freeDeliveryEnabled !== undefined) patch.freeDeliveryEnabled = toBool(body.freeDeliveryEnabled, 'freeDeliveryEnabled');
+  if (body.freeDeliveryThresholdCents !== undefined) {
+    patch.freeDeliveryThresholdCents = toIntInRange(body.freeDeliveryThresholdCents, 'freeDeliveryThresholdCents', { min: 0, max: 1000000 });
+  }
   if (body.ignoreOpeningHours !== undefined) patch.ignoreOpeningHours = toBool(body.ignoreOpeningHours, 'ignoreOpeningHours');
   if (body.deliveryEnabled !== undefined) patch.deliveryEnabled = toBool(body.deliveryEnabled, 'deliveryEnabled');
   if (body.storefrontLanguage !== undefined) patch.storefrontLanguage = validateLocale(body.storefrontLanguage);
