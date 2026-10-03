@@ -261,49 +261,21 @@
     return out;
   }
 
-/* Category iconography: a curated inline SVG set drawn in the brand colour.
-     Emoji read as cheap buttons at this size; these inherit `color` from CSS so
-     they follow the active/brand state with no extra rules. Same keyword match
-     as before — only the glyph changed. Decorative aid only. */
-  const ICONS = {
-    burger: '<path d="M4 9h16M5 13h14M6 17h12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" fill="none"/><path d="M4 9a8 4 0 0 1 16 0" fill="currentColor" opacity=".28"/>',
-    pizza: '<path d="M12 3 21 19H3L12 3Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="10" cy="13" r="1.6" fill="currentColor"/><circle cx="14.5" cy="16" r="1.4" fill="currentColor"/>',
-    fries: '<path d="M8 9h8l-1.2 11H9.2L8 9Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M10 9V4m4 5V4m-2 5V5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" fill="none"/>',
-    drink: '<path d="M7 6h10l-1.4 13a2 2 0 0 1-2 1.8h-3.2a2 2 0 0 1-2-1.8L7 6Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M6.5 10h11" stroke="currentColor" stroke-width="1.9"/>',
-    coffee: '<path d="M5 9h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M16 11h2a2.4 2.4 0 0 1 0 5h-2" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M8 3v2.5M12 3v2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
-    tea: '<path d="M5 10h12v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4v-6Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M17 12h1.6a2 2 0 0 1 0 4H17" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M9 6.5c1.6-1 1.6-2 0-3M12.5 6.5c1.6-1 1.6-2 0-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>',
-    dessert: '<path d="M5 11h14l-1.6 8a2 2 0 0 1-2 1.6H8.6a2 2 0 0 1-2-1.6L5 11Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M12 11V6m0 0a3 3 0 0 0 3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
-    ice: '<path d="M12 4a2 2 0 1 1 2 2h-4a2 2 0 1 1 2-2Zm0 0v13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/><path d="M8 20h8l-4-3-4 3Z" fill="currentColor" opacity=".28"/>',
-    chicken: '<path d="M17 5c2.2 0 3.5 1.8 3.5 4S19 14 15 14c-3 0-4-1.4-4-3.2C11 8.3 13 5 17 5Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M11 11 4 18m6-4-2 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>',
-    wrap: '<path d="M3 8h18v4a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V8Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M3 8 21 17M8 8.4l11 7.6" stroke="currentColor" stroke-width="1.6" opacity=".45" fill="none"/>',
-    salad: '<path d="M3.5 12h17a8.5 8.5 0 0 1-17 0Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M9 12c0-3 2-5 4.5-5M13 8.5c2 .6 3 2 3 3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>',
-    breakfast: '<circle cx="12" cy="13" r="7" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="12" cy="13" r="3" fill="currentColor" opacity=".3"/><path d="M8 3v4m8-4v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
-    fish: '<path d="M3 12c3.5-4.5 7-6.5 11-6.5S20 9 21 12c-1 3-4 4.5-7 4.5S6.5 14.5 3 12Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M17 10.5 21 7v10l-4-3.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="8" cy="11" r="1.1" fill="currentColor"/>',
-    soup: '<path d="M4 11h16v3.5A5.5 5.5 0 0 1 14.5 20h-5A5.5 5.5 0 0 1 4 14.5V11Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M9 7.5c1.5-1.4.5-2.4 0-3.5M13 7.5c1.5-1.4.5-2.4 0-3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>',
-    bread: '<path d="M4 14c0-4 3.6-7 8-7s8 3 8 7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M8.5 10.5h7M8.5 13.5h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>',
-    pasta: '<path d="M5 7c3 0 3 3 6 3s3-3 6-3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M4 12c3 0 3 3 6 3s3-3 6-3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M4 17c3 0 3 3 6 3s3-3 6-3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
-    meat: '<path d="M4.5 12.5c0-3.6 3.6-6.5 8-6.5s7 2.6 7 6.5c0 3-2.5 5-6 5H10c-3 0-5.5-2-5.5-5Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="currentColor" opacity=".26"/><path d="M19.5 12.5 22 15" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
-    all: '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 3.5v17M3.5 12h17" stroke="currentColor" stroke-width="1.6" opacity=".5"/>',
-    star: '<path d="m12 4 2.5 5.4 5.9.7-4.4 4 1.2 5.8L12 17.1 6.8 20l1.2-5.9-4.4-4 5.9-.7L12 4Z" fill="currentColor" opacity=".3"/><path d="m12 4 2.5 5.4 5.9.7-4.4 4 1.2 5.8L12 17.1 6.8 20l1.2-5.9-4.4-4 5.9-.7L12 4Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>',
-  };
-  function icon(name, key) {
-    return '<svg class="cat-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
-      + (ICONS[key] || '') + '</svg>';
-  }
-  const CAT_ICON = [
-    [/burger|برجر|همبرجر/, 'burger'], [/pizza|بيتزا/, 'pizza'], [/fries|بطاط|مقبلات|appetizer|side|جوانب/, 'fries'],
-    [/drink|مشروب|عصير|juice|صودا|soda|ميلك|milkshake/, 'drink'], [/coffee|قهوة|espresso|لاتيه|latte|كابتشينو/, 'coffee'],
-    [/tea|شاي/, 'tea'], [/dessert|حلويات|كيك|cake|كنافة|بقلاوة|baklava|sweet/, 'dessert'],
-    [/ice|بوظة|آيس|gelato/, 'ice'], [/chicken|دجاج|broast|بروستد/, 'chicken'],
-    [/shawarma|شاورما|wrap|لفائف|ساندويش|sandwich/, 'wrap'], [/salad|سلطة|تبولة|فتوش/, 'salad'],
-    [/breakfast|فطور|صباح|فول|فلافل|falafel/, 'breakfast'], [/fish|سمك|seafood|مأكولات بحرية|جمبري/, 'fish'],
-    [/soup|شوربة/, 'soup'], [/bread|خبز|منقوشة|manoushe/, 'bread'], [/pasta|باستا|معكرونة/, 'pasta'],
-    [/meat|لحم|ستيك|steak|مشاوي|grill|كباب/, 'meat'],
+  /* Category emoji by keyword (Arabic + English). Decorative aid only. */
+  const CAT_EMOJI = [
+    [/burger|برجر|همبرجر/, '🍔'], [/pizza|بيتزا/, '🍕'], [/fries|بطاط|مقبلات|appetizer|side|جوانب/, '🍟'],
+    [/drink|مشروب|عصير|juice|صودا|soda|ميلك|milkshake/, '🥤'], [/coffee|قهوة|espresso|لاتيه|latte|كابتشينو/, '☕'],
+    [/tea|شاي/, '🍵'], [/dessert|حلويات|كيك|cake|كنافة|بقلاوة|baklava|sweet/, '🍰'],
+    [/ice|بوظة|آيس|gelato/, '🍨'], [/chicken|دجاج|broast|بروستد/, '🍗'],
+    [/shawarma|شاورما|wrap|لفائف|ساندويش|sandwich/, '🌯'], [/salad|سلطة|تبولة|فتوش/, '🥗'],
+    [/breakfast|فطور|صباح|فول|فلافل|falafel/, '🍳'], [/fish|سمك|seafood|مأكولات بحرية|جمبري/, '🐟'],
+    [/soup|شوربة/, '🍲'], [/bread|خبز|منقوشة|manoushe/, '🥖'], [/pasta|باستا|معكرونة/, '🍝'],
+    [/meat|لحم|ستيك|steak|مشاوي|grill|كباب/, '🥩'],
   ];
-  function catIcon(name) {
+  function catEmoji(name) {
     const n = String(name || '').toLowerCase();
-    for (const [re, key] of CAT_ICON) if (re.test(n)) return icon(name, key);
-    return icon(name, 'all');
+    for (const [re, emoji] of CAT_EMOJI) if (re.test(n)) return emoji;
+    return '🍽️';
   }
 
   /* Client-side fee mirror for display only — the server recomputes authoritatively. */
@@ -358,7 +330,7 @@
       '<section class="live-hero">' + heroInner +
         (brand().tint ? '<div class="live-hero-tint" style="background:' + esc(brand().tint) + '"></div>' : '') +
         '<div class="live-hero-content"><div class="live-hero-top">' +
-          '<span class="status' + (view.openNow ? '' : ' closed') + '"><i></i>' + esc(view.openNow ? t().open : t().closed) + '</span>' +
+          '<span class="status"><i></i>' + esc(view.openNow ? t().open : t().closed) + '</span>' +
           '<span style="display:flex;gap:8px"><button class="outline-btn hero-btn" id="share-btn">' + esc(t().share) + '</button>' +
           '<button class="outline-btn hero-btn" id="book-btn"' + (view.orderingBlocked ? ' disabled' : '') + '>' + esc(t().book) + '</button></span>' +
         '</div></div></section>' +
@@ -373,7 +345,7 @@
         '<input id="menu-search" maxlength="60" aria-label="' + esc(t().search) + '" value="' + esc(searchTerm) + '" placeholder="' + esc(t().search) + '"></label></div>' +
       '<nav class="cat-nav" aria-label="' + esc(t().all) + '"><div class="cat-track">' + cats.map((c) =>
         '<button class="cat' + (c.id === activeCategory ? ' active' : '') + '" aria-pressed="' + (c.id === activeCategory) + '" data-cat="' + esc(c.id) + '">' +
-        '<span class="cat-circle">' + (c.id === 'all' ? catIcon('') : c.id === 'popular' ? icon('', 'star') : catIcon(c.name)) + '</span>' +
+        '<span class="cat-circle" aria-hidden="true">' + (c.id === 'all' ? '🍽️' : c.id === 'popular' ? '⭐' : esc(catEmoji(c.name))) + '</span>' +
         '<span class="cat-name">' + esc(c.name) + '</span></button>'
       ).join('') + '</div></nav>' +
       '<div id="dish-zone"></div>';
@@ -456,9 +428,9 @@
       const cards = items.filter(matches).map(dishCard).join('') ||
         '<div class="empty-results">' + esc(t().noMatch) + '</div>';
       const n = items.filter(matches).length;
-      return '<section class="menu-section" data-section="' + esc(id) + '"><div class="section-head"><h2>' +
-        esc(title) + '</h2><span class="section-count">' + String(n).padStart(2, '0') + '</span></div>' +
-        '<div class="dish-zone-wrap">' + cards + '</div></section>';
+      return '<section class="dish-section" data-section="' + esc(id) + '"><div class="dish-section-head"><h2>' +
+        esc(title) + '</h2><span>' + String(n).padStart(2, '0') + '</span></div>' +
+        '<div class="dish-grid">' + cards + '</div></section>';
     };
     let html = '';
     if (activeCategory === 'all' && !searchTerm) {
@@ -527,81 +499,6 @@
     }, reduced ? 0 : 300);
   }
   let lastSheetId = null;
-  /* Labels for optional product detail fields. These columns do not exist in the
-     schema yet, so nothing renders until a value is present — see factsHtml(). */
-  const FACT_LABELS = {
-    calories: lang === 'en' ? 'Calories' : 'السعرات',
-    ingredients: lang === 'en' ? 'Ingredients' : 'المكونات',
-    allergens: lang === 'en' ? 'Allergens' : 'مسببات الحساسية',
-    prep: lang === 'en' ? 'Preparation' : 'التحضير',
-  };
-
-  /* Ordered photo set: `images[0]` is the item's primary image (unchanged
-     contract), so an item with one photo renders exactly as it always has —
-     no carousel chrome at all. */
-  function itemPhotos(item) {
-    const extra = Array.isArray(item.images) ? item.images.filter(Boolean) : [];
-    const all = (item.image_path ? [item.image_path] : []).concat(extra.filter((p) => p !== item.image_path));
-    return all;
-  }
-
-  function shotsHtml(item) {
-    const photos = itemPhotos(item);
-    if (!photos.length) {
-      return '<div class="sheet-shot"><div class="sheet-img no-img"></div></div>';
-    }
-    if (photos.length === 1) {
-      return '<div class="sheet-shot"><img class="sheet-img" src="' + esc(photos[0]) +
-        '" alt="" fetchpriority="high" decoding="async"></div>';
-    }
-    return '<div class="sheet-track" id="sheet-track">' + photos.map((src, i) =>
-      '<div class="sheet-shot"><img class="sheet-img" src="' + esc(src) + '" alt=""' +
-      (i === 0 ? ' fetchpriority="high"' : ' loading="lazy"') + ' decoding="async"></div>'
-    ).join('') + '</div>';
-  }
-
-  /* Only fields that actually exist. No placeholder, no invented nutrition. */
-  function factsHtml(item) {
-    const facts = [];
-    const add = (label, value) => {
-      if (value !== undefined && value !== null && String(value).trim() !== '') {
-        facts.push('<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>');
-      }
-    };
-    // These fields do not exist in the schema yet. The renderer is written so it
-    // shows a section only when a value is actually present — no placeholder copy,
-    // no invented nutrition. Populate these columns and the block appears.
-    add(FACT_LABELS.calories, item.calories);
-    add(FACT_LABELS.ingredients, item.ingredients);
-    add(FACT_LABELS.allergens, item.allergens);
-    add(FACT_LABELS.prep, item.prep_note);
-    if (!facts.length) return '';
-    return '<div class="sheet-facts">' + facts.join('') + '</div>';
-  }
-
-  /** Dot indicator for the photo track; omitted entirely for a single photo. */
-  function paintSheetShots() {
-    const track = document.getElementById('sheet-track');
-    const dots = document.getElementById('sheet-shots');
-    if (!track || !dots) return;
-    const n = track.children.length;
-    if (n < 2) { dots.innerHTML = ''; return; }
-    dots.innerHTML = Array.from({ length: n }, (_, i) => '<i' + (i === 0 ? ' class="on"' : '') + '></i>').join('');
-  }
-
-  function bindSheetShots() {
-    const track = document.getElementById('sheet-track');
-    const dots = document.getElementById('sheet-shots');
-    if (!track || !dots) return;
-    paintSheetShots();
-    if (track.children.length < 2) return;
-    const sync = () => {
-      const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
-      Array.from(dots.children).forEach((d, k) => d.classList.toggle('on', k === i));
-    };
-    track.addEventListener('scroll', sync, { passive: true });
-  }
-
   function renderSheet() {
     if (!sheetItem) return;
     lastSheetId = sheetItem.id;
@@ -627,16 +524,14 @@
       '<div class="product-sheet-backdrop" id="sheet-backdrop"></div>' +
       '<section class="product-sheet" role="dialog" aria-modal="true" aria-label="' + esc(item.name) + '">' +
         '<div class="sheet-grip" aria-hidden="true"></div>' +
-        '<div class="sheet-media">' + shotsHtml(item) +
-        '<div class="sheet-shots" id="sheet-shots" aria-hidden="true"></div>' +
+        '<div class="sheet-media"><img class="sheet-img" src="' + esc(item.image_path || FOOD) + '" alt="' + esc(item.name) + '">' +
         '<button class="sheet-close" id="sheet-close" aria-label="Close">×</button></div>' +
-        '<div class="sheet-scroll">' +
+        '<div class="sheet-body">' +
         '<p class="sheet-eyebrow">' + esc(categoryName || view.name) + '</p>' +
-        '<h2 class="sheet-title">' + esc(item.name) + '</h2>' +
-        '<p class="sheet-price">' + esc(money(item.price_cents)) + '</p>' +
+        '<h2>' + esc(item.name) + '</h2>' +
         (item.description ? '<p class="sheet-desc">' + esc(item.description) + '</p>' : '') +
-        (!item.is_available ? '<p class="sheet-note sold">' + esc(t().soldOut) + '</p>' : '') +
-        factsHtml(item) +
+        '<p class="price-red sheet-price">' + esc(money(item.price_cents)) + '</p>' +
+        (!item.is_available ? '<p class="sheet-status sold">' + esc(t().soldOut) + '</p>' : '') +
         optsHtml +
         '</div>' +
         '<div class="sheet-action"><div class="qty" aria-label="' + esc(item.name) + '">' +
@@ -651,7 +546,6 @@
       root.querySelector('.product-sheet').classList.add('open');
       root.querySelector('.product-sheet-backdrop').classList.add('open');
     }
-    bindSheetShots();
     document.getElementById('sheet-backdrop').addEventListener('click', closeSheet);
     document.getElementById('sheet-close').addEventListener('click', closeSheet);
     // Swipe down on the grip/media to dismiss (touch only, no library).
@@ -727,19 +621,16 @@
   function dishCard(item) {
     const hasOpts = (item.options || []).length > 0;
     const q = (!hasOpts && Number.isInteger(cart[item.id])) ? cart[item.id] : 0;
-    // Image box is sized by aspect-ratio in CSS, so space is reserved before the
-    // photo loads and nothing shifts. A missing photo keeps the same box.
-    const img = '<div class="dish-media' + (item.image_path ? '' : ' no-img') + '">' +
-      (item.image_path ? '<img class="dish-img" loading="lazy" decoding="async" src="' + esc(item.image_path) + '" alt="">' : '') +
-      (item.is_popular ? '<b class="dish-badge">' + esc(t().top) + '</b>' : '') +
-      (!item.is_available ? '<span class="dish-badge sold">' + esc(t().soldOut) + '</span>' : '') + '</div>';
+    const img = '<div class="dish-img"><img loading="lazy" src="' + esc(item.image_path || FOOD) + '" alt="' + esc(item.name) + '">' +
+      (item.is_popular ? '<b>' + esc(t().top) + '</b>' : '') +
+      (!item.is_available ? '<span class="soldout-tag">' + esc(t().soldOut) + '</span>' : '') + '</div>';
     const action = (!item.is_available || hasOpts || !q) ? '' : qtyCtl(item.id, q, item.name);
-    return '<article class="dish' + (!item.is_available ? ' sold-out' : '') + '" data-open="' + esc(item.id) + '" role="button" tabindex="0" aria-label="' + esc(item.name) + '">' + img +
-      '<div class="dish-body"><h3>' + esc(item.name) + '</h3>' +
-      (item.description ? '<p class="dish-desc">' + esc(item.description) + '</p>' : '') +
-      (item.is_preorder ? '<p class="dish-note">' + esc(t().preorderBadge) +
-        (item.preorder_note ? ' · ' + esc(item.preorder_note) : '') + '</p>' : '') +
-      '<p class="price-red">' + esc(money(item.price_cents)) + '</p>' + action +
+    return '<article class="dish' + (!item.is_available ? ' sold' : '') + '" data-open="' + esc(item.id) + '" role="button" tabindex="0" aria-label="' + esc(item.name) + '">' + img +
+      '<div class="dish-main"><h3>' + esc(item.name) + '</h3>' +
+      (item.description ? '<p>' + esc(item.description) + '</p>' : '') +
+      (item.is_preorder ? '<p><span class="preorder-tag">' + esc(t().preorderBadge) + '</span>' +
+        (item.preorder_note ? ' <span>' + esc(item.preorder_note) + '</span>' : '') + '</p>' : '') +
+      '<div class="dish-foot"><span class="price-red">' + esc(money(item.price_cents)) + '</span>' + action + '</div>' +
       '</div></article>';
   }
 
@@ -786,9 +677,7 @@
         const poNote = e.item.is_preorder
           ? '<small>' + esc(t().preorderBadge) + (e.item.preorder_note ? ': ' + esc(e.item.preorder_note) : '') + '</small>'
           : '';
-        // Use the first photo of the set (the primary image) so the cart matches the menu.
-        const primary = (e.item.images && e.item.images[0]) || e.item.image_path || FOOD;
-        return '<div class="cart-row"><img src="' + esc(primary) + '" alt="">' +
+        return '<div class="cart-row"><img src="' + esc(e.item.image_path || FOOD) + '" alt="">' +
           '<div class="cart-row-main"><strong>' + esc(e.item.name) + '</strong>' +
           (names ? '<small>' + esc(names) + '</small>' : '') + poNote +
           '<small>' + esc(money(estimateUnit(e.item, e.selections) * e.qty)) + '</small></div>' +
@@ -883,35 +772,19 @@
     return '<div class="opt-groups">' + (item.options || []).map((g) => {
       const single = g.max_picks === 1;
       const pm = pickState(item.id)[g.id] || {};
-      // Selection rule stated in words, and only when a real limit exists.
-      const req = !!g.is_required || g.min_picks > 0;
-      const span = g.min_picks === g.max_picks
-        ? String(g.min_picks)
-        : g.min_picks + '\u2013' + g.max_picks;
-      const hint = req ? esc(t().optChoose + ' ' + span) : esc(t().optOptional);
-      const head = '<div class="group-head"><h3>' + esc(g.name) + '</h3>' +
-        '<span class="group-hint' + (req ? '' : ' optional') + '">' + hint + '</span></div>';
-      // Single-pick groups behave as radios, multi-pick as checkboxes with steppers.
+      const head = '<div class="opt-head"><strong>' + esc(g.name) + '</strong>' + groupHint(g) + '</div>';
       const body = single
-        ? (g.choices || []).map((c) =>
-          '<button type="button" class="pick radio" data-opt="' +
-          esc(item.id + '|' + g.id + '|' + c.id) + '" aria-pressed="' + (pm[c.id] ? 'true' : 'false') + '"' +
-          (c.is_available ? '' : ' disabled') + '>' +
-          '<span class="pick-box" aria-hidden="true"></span>' +
-          '<span class="pick-text">' + esc(c.name) + '</span>' +
-          '<span class="pick-add">' + pickPrice(item, g, c) + '</span></button>').join('')
-        : (g.choices || []).map((c) =>
-          '<div class="opt-row"><button type="button" class="pick" data-opt="' +
-          esc(item.id + '|' + g.id + '|' + c.id) + '" aria-pressed="' + (pm[c.id] ? 'true' : 'false') + '"' +
-          (c.is_available ? '' : ' disabled') + '>' +
-          '<span class="pick-box" aria-hidden="true"></span>' +
-          '<span class="pick-text">' + esc(c.name) + '</span>' +
-          '<span class="pick-add">' + pickPrice(item, g, c) + '</span></button>' +
+        ? '<div class="opt-opts">' + (g.choices || []).map((c) =>
+          '<button type="button" class="opt-pick' + (pm[c.id] ? ' active' : '') + '" data-opt="' +
+          esc(item.id + '|' + g.id + '|' + c.id) + '"' + (c.is_available ? '' : ' disabled') + '>' +
+          esc(c.name) + ' <span>' + pickPrice(item, g, c) + '</span></button>').join('') + '</div>'
+        : '<div class="opt-opts">' + (g.choices || []).map((c) =>
+          '<div class="opt-row"><span>' + esc(c.name) + ' <span>' + pickPrice(item, g, c) + '</span></span>' +
           '<div class="qty"><button type="button" data-optminus="' + esc(item.id + '|' + g.id + '|' + c.id) + '">−</button>' +
           '<span>' + (pm[c.id] || 0) + '</span>' +
           '<button type="button" data-optplus="' + esc(item.id + '|' + g.id + '|' + c.id) + '"' +
-          (c.is_available ? '' : ' disabled') + '>＋</button></div></div>').join('');
-      return '<div class="group" id="group-' + esc(g.id) + '">' + head + body + '</div>';
+          (c.is_available ? '' : ' disabled') + '>＋</button></div></div>').join('') + '</div>';
+      return '<div class="opt-group">' + head + body + '</div>';
     }).join('') + '</div>' +
     '<p class="opt-error hidden" id="opterr-' + esc(item.id) + '">' + esc(t().optNeedMore) + '</p>';
   }

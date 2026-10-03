@@ -630,11 +630,8 @@
         '<h3 class="section-title">' + I.t('mRecentOrders') + '</h3><div id="owner-orders" class="mb-2"><div class="empty-state small">' + I.t('mLoading') + '</div></div>' +
 
         '<h3 class="section-title">' + I.t('heroImages') + '</h3><div id="owner-hero" class="mb-2"><div class="empty-state small">' + I.t('mLoading') + '</div></div>' +
-        // Hidden input behind a styled button: no raw file control in the UI. A
-        // selection alone triggers the upload — no separate submit step.
-        '<div class="hero-add"><button type="button" class="btn btn-outline btn-sm" id="oh-pick">' + esc(I.t('uploadHeroImage')) + '</button>' +
-        '<input id="oh-file" type="file" accept="image/jpeg,image/png,image/webp" hidden>' +
-        '<p class="hint muted small">' + esc(I.t('heroFormatsHint')) + '</p></div>' +
+        '<form id="owner-hero-form" class="mt-1"><input id="oh-file" type="file" accept="image/jpeg,image/png,image/webp">' +
+        '<button type="submit" class="btn btn-outline btn-sm mt-1">' + esc(I.t('uploadHeroImage')) + '</button></form>' +
 
         '<h3 class="section-title">' + I.t('mSubscription') + '</h3><div id="owner-sub" class="mb-2"><div class="empty-state small">' + I.t('mLoading') + '</div></div>'
       );
@@ -663,24 +660,15 @@
         } catch (e) { zone.textContent = e.message; }
       };
       loadOwnerHero();
-      document.getElementById('oh-pick').addEventListener('click', () => {
-        document.getElementById('oh-file').click();
-      });
-      document.getElementById('oh-file').addEventListener('change', async (e) => {
-        const input = e.target;
-        const f = input.files && input.files[0];
+      document.getElementById('owner-hero-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const f = document.getElementById('oh-file').files[0];
         if (!f) return;
-        try {
-          const opt = await App.compressImage(f, { max: 1600, quality: 0.75 });
-          const fd = new FormData();
-          fd.append('image', opt, 'hero.webp');
-          await api.request('/api/admin/images?type=hero&restaurantId=' + id, { method: 'POST', body: fd });
-          loadOwnerHero();
-        } catch (err) {
-          toast(err.message, 'error');
-        } finally {
-          input.value = '';
-        }
+        const opt = await App.compressImage(f, { max: 1600, quality: 0.75 });
+        const fd = new FormData();
+        fd.append('image', opt, 'hero.webp');
+        await api.request('/api/admin/images?type=hero&restaurantId=' + id, { method: 'POST', body: fd });
+        loadOwnerHero();
       });
 
       // Subscription status + minimal actions (Task 14: no billing console).
