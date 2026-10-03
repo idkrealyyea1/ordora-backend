@@ -350,3 +350,24 @@ html[dir="ltr"] .logo-track{animation-name:logos-ltr}
 .mock-lines span{display:block;height:14px;border-radius:7px;background:linear-gradient(90deg,rgba(248,240,223,.14),rgba(248,240,223,.3),rgba(248,240,223,.14))}
 .dashboard-panel .chips{margin-top:6px}
 @media(max-width:620px){.logos{padding:85px 0 70px}.logo-chip-name{max-width:120px;overflow:hidden;text-overflow:ellipsis}}
+
+/* ---- Storefront keyboard focus + very small screens (320px) ---- */
+.live-page :focus-visible,.cat:focus-visible,.search-toggle:focus-visible,.lang-seg:focus-visible,
+.mode-seg button:focus-visible,.dish:focus-visible,.opt-pick:focus-visible,
+.product-sheet :focus-visible,.qty button:focus-visible,#live-cart-btn:focus-visible{
+  outline:3px solid var(--coral);outline-offset:2px;border-radius:12px}
+@media(max-width:360px){
+  .id-card{padding:13px;gap:11px;margin-top:-40px}
+  .id-logo-img,.id-logo{width:62px;height:62px;border-radius:15px}
+  .id-logo{font-size:28px}
+  .id-main h1{font-size:20px}
+  .mode-seg button{padding:7px 13px;font-size:11px}
+  .cat{width:66px}
+  .cat-circle{width:56px;height:56px;font-size:26px}
+  .cat-name{font-size:10px;max-width:66px}
+  .dish{grid-template-columns:104px 1fr}
+  .dish-img{min-height:112px}
+  .sheet-action{padding:10px 13px calc(12px + env(safe-area-inset-bottom))}
+  .sheet-action .co-submit{font-size:12px;padding:0 12px}
+  #live-cart-btn{min-height:50px;font-size:12px}
+}
