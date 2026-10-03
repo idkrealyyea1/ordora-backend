@@ -45,6 +45,9 @@
       bkDate: 'التاريخ', bkTime: 'الوقت', bkNotes: 'ملاحظات', bookNow: 'تأكيد الحجز',
       bookingCreated: 'تم إرسال طلب الحجز', close: 'إغلاق', currencies: 'ر.س',
       optRequired: 'مطلوب', optNeedMore: 'أكمل الاختيارات المطلوبة قبل الإضافة',
+      optOptional: 'اختياري', optChoose: 'اختر',
+      freeShipMore: 'أضف بقيمة {x} لتحصل على توصيل مجاني', freeShipUnlocked: 'رائع! التوصيل مجاني لطلبك',
+      free: 'مجاني', searchLabel: 'بحث', langName: 'العربية',
       preorderBadge: 'طلب مسبق',
     },
     en: {
@@ -74,6 +77,9 @@
       bkDate: 'Date', bkTime: 'Time', bkNotes: 'Notes', bookNow: 'Confirm booking',
       bookingCreated: 'Booking request sent', close: 'Close', currencies: '',
       optRequired: 'Required', optNeedMore: 'Please complete the required choices first',
+      optOptional: 'Optional', optChoose: 'Choose',
+      freeShipMore: 'Add {x} more for free delivery', freeShipUnlocked: 'Free delivery unlocked',
+      free: 'Free', searchLabel: 'Search', langName: 'English',
       preorderBadge: 'Pre-order',
     },
   };
@@ -171,17 +177,16 @@
       .filter(Boolean);
   }
   const subtotalCents = () => cartEntries().reduce((s, e) => s + estimateUnit(e.item, e.selections) * e.qty, 0);
-  const feeCents = () => (orderType === 'delivery' ? Number((view && view.settings && view.settings.deliveryFeeCents) || 0) : 0);
+  // Display-only fee mirror (server recomputes authoritatively at checkout).
+  const feeCents = () => {
+    if (orderType !== 'delivery') return 0;
+    const s = (view && view.settings) || {};
+    if (s.freeDeliveryEnabled === true && subtotalCents() >= Number(s.freeDeliveryThresholdCents || 0)) return 0;
+    return Number(s.deliveryFeeCents || 0);
+  };
   const totalUnits = () => cartEntries().reduce((s, e) => s + e.qty, 0);
   // D4: delivery availability is the restaurant's own setting toggle, not company linkage.
   const hasDelivery = () => !view || !view.settings || view.settings.deliveryEnabled !== false;
-  const itemVisible = (item) => {
-    if (searchTerm && !item.name.toLowerCase().includes(searchTerm) &&
-        !(item.description || '').toLowerCase().includes(searchTerm)) return false;
-    if (activeCategory === 'all') return true;
-    if (activeCategory === 'popular') return !!item.is_popular;
-    return item.category_id === activeCategory;
-  };
 
   /* ---------------------------- render ----------------------------- */
   const $head = () => document.getElementById('live-head');
@@ -199,19 +204,41 @@
   }
 
   function renderHead() {
-    const s = view.settings || {};
-    const nm = (lang === 'en' && s.nameEn) ? s.nameEn : view.name;
-    const letter = (nm || '?').trim().charAt(0);
-    const b = brand();
-    const logoStyle = b.logoBg ? ' style="background:' + esc(b.logoBg) + ';color:' + esc(b.logoFg) + '"' : '';
-    const logo = s.logoPath
-      ? '<img class="live-logo-img" src="' + esc(s.logoPath) + '" alt="">'
-      : '<span class="live-logo"' + logoStyle + '>' + esc(letter) + '</span>';
+    const other = lang === 'ar' ? 'en' : 'ar';
+    const flag = other === 'ar' ? '🇸🇦' : '🇺🇸';
+    const fulfillment = hasDelivery()
+      ? '<div class="mode-seg" role="group" aria-label="' + esc(t().delivery) + '/' + esc(t().pickup) + '">' +
+        '<button data-mode="delivery"' + (orderType === 'delivery' ? ' class="active" aria-pressed="true"' : ' aria-pressed="false"') + '>' + esc(t().delivery) + '</button>' +
+        '<button data-mode="pickup"' + (orderType === 'pickup' ? ' class="active" aria-pressed="true"' : ' aria-pressed="false"') + '>' + esc(t().pickup) + '</button></div>'
+      : '';
     $head().innerHTML =
-      '<div class="live-brand">' + logo +
-      '<div><strong>' + esc(nm) + '</strong><small>' + esc(view.slug.toUpperCase()) + '</small></div></div>' +
-      '<div class="live-actions"><button class="outline-btn" id="lang-btn">' + (lang === 'ar' ? 'English' : 'العربية') + '</button></div>';
-    document.getElementById('lang-btn').addEventListener('click', () => setLang(lang === 'ar' ? 'en' : 'ar'));
+      '<div class="topbar">' + fulfillment +
+      '<div class="topbar-actions">' +
+      '<button class="search-toggle" id="search-toggle" aria-label="' + esc(t().searchLabel) + '" aria-expanded="false">' +
+        '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>' +
+      '<button class="lang-seg" id="lang-btn" aria-label="Language / اللغة"><span aria-hidden="true">' + flag + '</span> ' + esc(T[other].langName) + '</button>' +
+      '</div></div>';
+    document.getElementById('lang-btn').addEventListener('click', () => setLang(other));
+    document.getElementById('search-toggle').addEventListener('click', () => {
+      const bar = document.getElementById('searchbar');
+      const open = bar.classList.toggle('open');
+      document.getElementById('search-toggle').setAttribute('aria-expanded', String(open));
+      const input = document.getElementById('menu-search');
+      if (open) input.focus();
+      else if (input.value) { input.value = ''; searchTerm = ''; updateGrids(); }
+    });
+    $head().querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => setOrderType(b.dataset.mode)));
+  }
+
+  function setOrderType(next) {
+    if (next !== 'delivery' && next !== 'pickup') return;
+    if (next === 'delivery' && !hasDelivery()) next = 'pickup';
+    if (orderType === next) return;
+    orderType = next;
+    try { localStorage.setItem('ordertype_' + slug, orderType); } catch (_) {}
+    renderHead();
+    renderBar();
+    if (cartOpen) renderOverlay();
   }
 
   /* Restaurant brand colors: logo tile (primary) + cover tint (secondary).
@@ -230,14 +257,54 @@
     return out;
   }
 
+  /* Category emoji by keyword (Arabic + English). Decorative aid only. */
+  const CAT_EMOJI = [
+    [/burger|برجر|همبرجر/, '🍔'], [/pizza|بيتزا/, '🍕'], [/fries|بطاط|مقبلات|appetizer|side|جوانب/, '🍟'],
+    [/drink|مشروب|عصير|juice|صودا|soda|ميلك|milkshake/, '🥤'], [/coffee|قهوة|espresso|لاتيه|latte|كابتشينو/, '☕'],
+    [/tea|شاي/, '🍵'], [/dessert|حلويات|كيك|cake|كنافة|بقلاوة|baklava|sweet/, '🍰'],
+    [/ice|بوظة|آيس|gelato/, '🍨'], [/chicken|دجاج|broast|بروستد/, '🍗'],
+    [/shawarma|شاورما|wrap|لفائف|ساندويش|sandwich/, '🌯'], [/salad|سلطة|تبولة|فتوش/, '🥗'],
+    [/breakfast|فطور|صباح|فول|فلافل|falafel/, '🍳'], [/fish|سمك|seafood|مأكولات بحرية|جمبري/, '🐟'],
+    [/soup|شوربة/, '🍲'], [/bread|خبز|منقوشة|manoushe/, '🥖'], [/pasta|باستا|معكرونة/, '🍝'],
+    [/meat|لحم|ستيك|steak|مشاوي|grill|كباب/, '🥩'],
+  ];
+  function catEmoji(name) {
+    const n = String(name || '').toLowerCase();
+    for (const [re, emoji] of CAT_EMOJI) if (re.test(n)) return emoji;
+    return '🍽️';
+  }
+
+  /* Client-side fee mirror for display only — the server recomputes authoritatively. */
+  const freeShipOn = () => {
+    const s = (view && view.settings) || {};
+    return orderType === 'delivery' && s.freeDeliveryEnabled === true &&
+      subtotalCents() >= Number(s.freeDeliveryThresholdCents || 0);
+  };
+  function freeShipMsg() {
+    const s = (view && view.settings) || {};
+    if (orderType !== 'delivery' || s.freeDeliveryEnabled !== true) return '';
+    if (freeShipOn()) return '<p class="freeship unlocked" role="status">🎉 ' + esc(t().freeShipUnlocked) + '</p>';
+    const need = Number(s.freeDeliveryThresholdCents || 0) - subtotalCents();
+    if (need <= 0) return '';
+    return '<p class="freeship" role="status">' + esc(t().freeShipMore.replace('{x}', money(need))) + '</p>';
+  }
+
   function renderContent() {
     const s = view.settings || {};
+    const nm = (lang === 'en' && s.nameEn) ? s.nameEn : view.name;
+    const letter = (nm || '?').trim().charAt(0);
+    const b = brand();
+    const logoStyle = b.logoBg ? ' style="background:' + esc(b.logoBg) + ';color:' + esc(b.logoFg) + '"' : '';
+    const logo = s.logoPath
+      ? '<img class="id-logo-img" src="' + esc(s.logoPath) + '" alt="">'
+      : '<span class="id-logo"' + logoStyle + '>' + esc(letter) + '</span>';
     const cover = s.coverPath || FOOD;
     const addr = s.address ? '<span>' + esc(s.address) + '</span>' : '';
     const phone = s.phone ? '<span><a href="tel:' + esc(s.phone.replace(/[^+\d]/g, '')) + '">' + esc(s.phone) + '</a></span>' : '';
     const waDigits = (s.whatsapp || '').replace(/\D/g, '');
     const wa = waDigits ? '<span><a href="https://wa.me/' + esc(waDigits) + '" target="_blank" rel="noopener">WhatsApp</a></span>' : '';
-    const del = hasDelivery() ? '<span>' + esc(t().deliveryBy + ': ' + view.deliveryGroups.join('، ')) + '</span>' : '';
+    const del = hasDelivery() && view.deliveryGroups.length
+      ? '<span>' + esc(t().deliveryBy + ': ' + view.deliveryGroups.join(lang === 'ar' ? '، ' : ', ')) + '</span>' : '';
     const cats = [{ id: 'all', name: t().all }, { id: 'popular', name: t().popular }]
       .concat(view.categories.map((c) => ({ id: c.id, name: c.name })));
 
@@ -246,32 +313,37 @@
       : [cover];
     const heroInner = heroImgs.length > 1
       ? '<div class="hero-carousel" id="hero-carousel">' + heroImgs.map((src, i) =>
-          '<img class="hero-slide' + (i === 0 ? ' active' : '') + '" src="' + esc(src) + '" alt=""' + (i === 0 ? '' : ' loading="lazy"') + ' width="1920" height="1080">'
+          '<img class="hero-slide' + (i === 0 ? ' active' : '') + '" src="' + esc(src) + '" alt=""' + (i === 0 ? ' fetchpriority="high"' : ' loading="lazy"') + ' width="1920" height="1080">'
         ).join('') +
         '<button class="hero-nav hero-prev" id="hero-prev" aria-label="Previous">‹</button>' +
         '<button class="hero-nav hero-next" id="hero-next" aria-label="Next">›</button>' +
         '<div class="hero-dots">' + heroImgs.map((_, i) =>
           '<button class="hero-dot' + (i === 0 ? ' active' : '') + '" data-hero="' + i + '" aria-label="Slide ' + (i + 1) + '"></button>'
         ).join('') + '</div></div>'
-      : '<img src="' + esc(heroImgs[0]) + '" alt="" width="1920" height="1080">';
+      : '<img src="' + esc(heroImgs[0]) + '" alt="" width="1920" height="1080" fetchpriority="high">';
 
     $content().innerHTML =
       '<section class="live-hero">' + heroInner +
         (brand().tint ? '<div class="live-hero-tint" style="background:' + esc(brand().tint) + '"></div>' : '') +
         '<div class="live-hero-content"><div class="live-hero-top">' +
           '<span class="status"><i></i>' + esc(view.openNow ? t().open : t().closed) + '</span>' +
-          '<span style="display:flex;gap:8px"><button class="outline-btn" style="color:var(--paper);border-color:rgba(255,255,255,.25)" id="share-btn">' + esc(t().share) + '</button>' +
-          '<button class="outline-btn" style="color:var(--paper);border-color:rgba(255,255,255,.25)" id="book-btn"' + (view.orderingBlocked ? ' disabled' : '') + '>' + esc(t().book) + '</button></span>' +
-        '</div><div><h1>' + esc((lang === 'en' && s.nameEn) ? s.nameEn : view.name) + '</h1>' +
+          '<span style="display:flex;gap:8px"><button class="outline-btn hero-btn" id="share-btn">' + esc(t().share) + '</button>' +
+          '<button class="outline-btn hero-btn" id="book-btn"' + (view.orderingBlocked ? ' disabled' : '') + '>' + esc(t().book) + '</button></span>' +
+        '</div></div></section>' +
+      '<section class="id-card" aria-label="' + esc(nm) + '">' + logo +
+        '<div class="id-main"><h1>' + esc(nm) + '</h1>' +
         (s.description ? '<p>' + esc(s.description) + '</p>' : '') +
-        '<div class="live-meta">' + addr + phone + wa + del + '</div></div></div></section>' +
+        '<div class="live-meta">' + addr + phone + wa + del + '</div></div></section>' +
       (!view.openNow ? '<div class="live-alert warn">' + esc(t().closedNotice) + '</div>' : '') +
       (view.orderingBlocked ? '<div class="live-alert warn" role="status">' + esc(t()[view.noticeKey === 'sub_store_suspended' ? 'subStoreSuspended' : 'subStoreExpired']) + '</div>' : '') +
-      '<section class="live-section-head"><div><small>' + esc(t().menuEye) + '</small><h2>' + esc(t().menuTitle) + '</h2></div></section>' +
-      '<label class="search"><input id="menu-search" maxlength="60" aria-label="' + esc(t().search) + '" value="' + esc(searchTerm) + '" placeholder="' + esc(t().search) + '"></label>' +
-      '<nav class="category-nav" aria-label="' + esc(t().all) + '">' + cats.map((c) =>
-        '<button class="' + (c.id === activeCategory ? 'active' : '') + '" aria-pressed="' + (c.id === activeCategory) + '" data-cat="' + esc(c.id) + '">' + esc(c.name) + '</button>'
-      ).join('') + '</nav>' +
+      '<div class="searchbar" id="searchbar"><label class="search">' +
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>' +
+        '<input id="menu-search" maxlength="60" aria-label="' + esc(t().search) + '" value="' + esc(searchTerm) + '" placeholder="' + esc(t().search) + '"></label></div>' +
+      '<nav class="cat-nav" aria-label="' + esc(t().all) + '"><div class="cat-track">' + cats.map((c) =>
+        '<button class="cat' + (c.id === activeCategory ? ' active' : '') + '" aria-pressed="' + (c.id === activeCategory) + '" data-cat="' + esc(c.id) + '">' +
+        '<span class="cat-circle" aria-hidden="true">' + (c.id === 'all' ? '🍽️' : c.id === 'popular' ? '⭐' : esc(catEmoji(c.name))) + '</span>' +
+        '<span class="cat-name">' + esc(c.name) + '</span></button>'
+      ).join('') + '</div></nav>' +
       '<div id="dish-zone"></div>';
 
     document.getElementById('share-btn').addEventListener('click', sharePage);
@@ -284,6 +356,8 @@
         x.setAttribute('aria-pressed', String(on));
       });
       updateGrids();
+      const sec = document.querySelector('[data-section="' + b.dataset.cat + '"]') || document.getElementById('dish-zone');
+      if (sec) { try { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {} }
     }));
     document.getElementById('menu-search').addEventListener('input', (e) => {
       searchTerm = e.target.value.trim().toLowerCase();
@@ -336,21 +410,41 @@
       zone.innerHTML = '<div class="live-alert warn">' + esc(t().menuEmpty) + '</div>';
       return;
     }
-    const items = view.items.filter(itemVisible);
-    const showFeatured = activeCategory === 'all' && !searchTerm;
-    const featured = showFeatured ? items.filter((i) => i.is_popular) : [];
-    const rest = showFeatured ? items.filter((i) => !i.is_popular) : items;
-    const label = activeCategory === 'all' ? (showFeatured ? t().full : t().all)
-      : activeCategory === 'popular' ? t().popular
-      : (view.categories.find((x) => x.id === activeCategory) || {}).name || t().all;
-
-    zone.innerHTML =
-      (featured.length
-        ? '<section class="dish-section"><div class="dish-section-head"><h2>' + esc(t().featured) + '</h2><span>' + String(featured.length).padStart(2, '0') + '</span></div>' +
-          '<div class="dish-grid">' + featured.map(dishCard).join('') + '</div></section>'
-        : '') +
-      '<section class="dish-section"><div class="dish-section-head"><h2>' + esc(label) + '</h2><span>' + String(rest.length).padStart(2, '0') + '</span></div>' +
-        '<div class="dish-grid">' + (rest.map(dishCard).join('') || '<div class="empty-results">' + esc(t().noMatch) + '</div>') + '</div></section>';
+    const matches = (item) => {
+      if (searchTerm && !item.name.toLowerCase().includes(searchTerm) &&
+          !(item.description || '').toLowerCase().includes(searchTerm)) return false;
+      return true;
+    };
+    const inCat = (item, id) => {
+      if (id === 'all') return true;
+      if (id === 'popular') return !!item.is_popular;
+      return item.category_id === id;
+    };
+    const section = (id, title, items) => {
+      const cards = items.filter(matches).map(dishCard).join('') ||
+        '<div class="empty-results">' + esc(t().noMatch) + '</div>';
+      const n = items.filter(matches).length;
+      return '<section class="dish-section" data-section="' + esc(id) + '"><div class="dish-section-head"><h2>' +
+        esc(title) + '</h2><span>' + String(n).padStart(2, '0') + '</span></div>' +
+        '<div class="dish-grid">' + cards + '</div></section>';
+    };
+    let html = '';
+    if (activeCategory === 'all' && !searchTerm) {
+      const featured = view.items.filter((i) => i.is_popular && matches(i));
+      if (featured.length) html += section('popular', t().featured, view.items.filter((i) => i.is_popular));
+      for (const c of view.categories) {
+        const items = view.items.filter((i) => i.category_id === c.id);
+        if (items.some(matches)) html += section(c.id, c.name, items);
+      }
+      const loose = view.items.filter((i) => !i.category_id || !view.categories.some((c) => c.id === i.category_id));
+      if (loose.some(matches)) html += section('all', t().full, loose);
+    } else {
+      const title = activeCategory === 'all' ? t().all
+        : activeCategory === 'popular' ? t().popular
+        : (view.categories.find((x) => x.id === activeCategory) || {}).name || t().all;
+      html = section(activeCategory, title, view.items.filter((i) => inCat(i, activeCategory)));
+    }
+    zone.innerHTML = html;
 
     zone.querySelectorAll('[data-plus]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); changeCart(b.dataset.plus, 1); }));
     zone.querySelectorAll('[data-minus]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); changeCart(b.dataset.minus, -1); }));
@@ -397,25 +491,46 @@
       document.body.appendChild(root);
     }
     const optsHtml = hasOpts ? pickerHtml(item) : '';
+    const total = money(estimateSheetTotal(item, sheetQty));
     root.innerHTML =
       '<div class="product-sheet-backdrop" id="sheet-backdrop"></div>' +
       '<section class="product-sheet" role="dialog" aria-modal="true" aria-label="' + esc(item.name) + '">' +
-        '<button class="sheet-close" id="sheet-close" aria-label="Close">×</button>' +
-        '<img class="sheet-img" src="' + esc(item.image_path || FOOD) + '" alt="' + esc(item.name) + '">' +
+        '<div class="sheet-grip" aria-hidden="true"></div>' +
+        '<div class="sheet-media"><img class="sheet-img" src="' + esc(item.image_path || FOOD) + '" alt="' + esc(item.name) + '">' +
+        '<button class="sheet-close" id="sheet-close" aria-label="Close">×</button></div>' +
+        '<div class="sheet-body">' +
+        '<p class="sheet-eyebrow">' + esc(categoryName || view.name) + '</p>' +
         '<h2>' + esc(item.name) + '</h2>' +
-        (categoryName ? '<p class="sheet-category muted small">' + esc(categoryName) + '</p>' : '') +
         (item.description ? '<p class="sheet-desc">' + esc(item.description) + '</p>' : '') +
         '<p class="price-red sheet-price">' + esc(money(item.price_cents)) + '</p>' +
-        (item.is_available ? '<p class="sheet-status ok">' + esc(t().open) + '</p>' : '<p class="sheet-status sold">' + esc(t().soldOut) + '</p>') +
+        (!item.is_available ? '<p class="sheet-status sold">' + esc(t().soldOut) + '</p>' : '') +
         optsHtml +
-        '<div class="sheet-qty"><div class="qty" aria-label="' + esc(item.name) + '">' +
-          '<button id="sheet-minus">−</button><span>' + sheetQty + '</span><button id="sheet-plus">＋</button></div>' +
-          '<button class="co-submit" id="sheet-add"' + (item.is_available ? '' : ' disabled') + '>' + esc(t().add) + '</button></div>' +
-        '<p class="sheet-total" aria-live="polite">' + esc(t().total) + ': <strong id="sheet-total-val">' + esc(money(estimateSheetTotal(item, sheetQty))) + '</strong></p>' +
+        '</div>' +
+        '<div class="sheet-action"><div class="qty" aria-label="' + esc(item.name) + '">' +
+          '<button id="sheet-minus" aria-label="−">−</button><span>' + sheetQty + '</span><button id="sheet-plus" aria-label="+">＋</button></div>' +
+          '<button class="co-submit" id="sheet-add"' + (item.is_available ? '' : ' disabled') + '>' +
+            esc(t().add) + ' · <span id="sheet-total-val">' + esc(total) + '</span></button></div>' +
       '</section>';
     document.body.classList.add('sheet-open');
     document.getElementById('sheet-backdrop').addEventListener('click', closeSheet);
     document.getElementById('sheet-close').addEventListener('click', closeSheet);
+    // Swipe down on the grip/media to dismiss (touch only, no library).
+    (function () {
+      const panel = root.querySelector('.product-sheet');
+      let startY = null;
+      panel.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; }, { passive: true });
+      panel.addEventListener('touchmove', (e) => {
+        if (startY === null) return;
+        const dy = e.touches[0].clientY - startY;
+        if (dy > 0) panel.style.transform = 'translateY(' + Math.min(dy, 160) + 'px)';
+      }, { passive: true });
+      panel.addEventListener('touchend', (e) => {
+        const dy = e.changedTouches[0].clientY - startY;
+        panel.style.transform = '';
+        startY = null;
+        if (dy > 110) closeSheet();
+      });
+    })();
     document.getElementById('sheet-minus').addEventListener('click', () => { sheetQty = Math.max(1, sheetQty - 1); renderSheet(); });
     document.getElementById('sheet-plus').addEventListener('click', () => { sheetQty += 1; renderSheet(); });
     document.getElementById('sheet-add').addEventListener('click', () => {
@@ -471,18 +586,14 @@
     const hasOpts = (item.options || []).length > 0;
     const q = (!hasOpts && Number.isInteger(cart[item.id])) ? cart[item.id] : 0;
     const img = '<div class="dish-img"><img loading="lazy" src="' + esc(item.image_path || FOOD) + '" alt="' + esc(item.name) + '">' +
-      (item.is_popular ? '<b>' + esc(t().top) + '</b>' : '') + '</div>';
-    let action = '';
-    if (!item.is_available) {
-      action = '<span class="soldout-tag">' + esc(t().soldOut) + '</span>';
-    } else if (!hasOpts && q) {
-      action = qtyCtl(item.id, q, item.name);
-    }
-    return '<article class="dish" data-open="' + esc(item.id) + '" role="button" tabindex="0" aria-label="' + esc(item.name) + '">' + img +
-      '<div class="dish-main"><div><h3>' + esc(item.name) + '</h3>' +
+      (item.is_popular ? '<b>' + esc(t().top) + '</b>' : '') +
+      (!item.is_available ? '<span class="soldout-tag">' + esc(t().soldOut) + '</span>' : '') + '</div>';
+    const action = (!item.is_available || hasOpts || !q) ? '' : qtyCtl(item.id, q, item.name);
+    return '<article class="dish' + (!item.is_available ? ' sold' : '') + '" data-open="' + esc(item.id) + '" role="button" tabindex="0" aria-label="' + esc(item.name) + '">' + img +
+      '<div class="dish-main"><h3>' + esc(item.name) + '</h3>' +
       (item.description ? '<p>' + esc(item.description) + '</p>' : '') +
       (item.is_preorder ? '<p><span class="preorder-tag">' + esc(t().preorderBadge) + '</span>' +
-        (item.preorder_note ? ' <span>' + esc(item.preorder_note) + '</span>' : '') + '</p>' : '') + '</div>' +
+        (item.preorder_note ? ' <span>' + esc(item.preorder_note) + '</span>' : '') + '</p>' : '') +
       '<div class="dish-foot"><span class="price-red">' + esc(money(item.price_cents)) + '</span>' + action + '</div>' +
       '</div></article>';
   }
@@ -541,8 +652,9 @@
           '<button data-type="delivery"' + (orderType === 'delivery' ? ' class="active"' : '') + '>' + esc(t().delivery) + '</button></div>'
         : '') +
       '<div class="cart-total" aria-live="polite" aria-atomic="true" style="display:grid;gap:6px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>' + esc(t().subtotal) + '</span><span>' + esc(money(sub)) + '</span></div>' +
-      (orderType === 'delivery' ? '<div style="display:flex;justify-content:space-between;font-size:13px"><span>' + esc(t().deliveryFee) + '</span><span>' + esc(money(fee)) + '</span></div>' : '') +
+      (orderType === 'delivery' ? '<div style="display:flex;justify-content:space-between;font-size:13px"><span>' + esc(t().deliveryFee) + '</span><span>' + (fee === 0 ? esc(t().free) : esc(money(fee))) + '</span></div>' : '') +
       '<div style="display:flex;justify-content:space-between"><span>' + esc(t().total) + '</span><span>' + esc(money(sub + fee)) + '</span></div></div>' +
+      freeShipMsg() +
       '<form id="checkout-form" class="co-form" novalidate>' +
         '<label>' + esc(t().yourName) + '<input id="co-name" maxlength="80" autocomplete="name" value="' + esc(co.name) + '"></label>' +
         '<label>' + esc(t().waNumber) + '<input id="co-wa" type="tel" maxlength="20" dir="ltr" autocomplete="tel" value="' + esc(co.wa) + '"></label>' +
@@ -562,9 +674,7 @@
     root.querySelectorAll('[data-minus]').forEach((b) => b.addEventListener('click', () => changeCart(b.dataset.minus, -1)));
     root.querySelectorAll('.co-type button').forEach((b) => b.addEventListener('click', () => {
       stashCo();
-      orderType = b.dataset.type;
-      try { localStorage.setItem('ordertype_' + slug, orderType); } catch (_) {}
-      renderOverlay();
+      setOrderType(b.dataset.type);
     }));
     document.getElementById('place-order-btn').addEventListener('click', submitOrder);
     document.getElementById('order-wa-btn').addEventListener('click', orderViaWhatsapp);
@@ -615,12 +725,18 @@
       ? esc(money(choice.price_cents))
       : '+' + esc(money(choice.price_cents));
   }
+  function groupHint(g) {
+    if (g.min_picks > 0) {
+      const span = g.min_picks === g.max_picks ? String(g.min_picks) : g.min_picks + '–' + g.max_picks;
+      return '<span class="opt-req">' + esc(t().optChoose + ' ' + span) + '</span>';
+    }
+    return '<span class="opt-opt">' + esc(t().optOptional) + '</span>';
+  }
   function pickerHtml(item) {
     return '<div class="opt-groups">' + (item.options || []).map((g) => {
       const single = g.max_picks === 1;
       const pm = pickState(item.id)[g.id] || {};
-      const head = '<div class="opt-head"><strong>' + esc(g.name) + '</strong>' +
-        (g.min_picks > 0 ? ' <span class="opt-req">' + esc(t().optRequired) + '</span>' : '') + '</div>';
+      const head = '<div class="opt-head"><strong>' + esc(g.name) + '</strong>' + groupHint(g) + '</div>';
       const body = single
         ? '<div class="opt-opts">' + (g.choices || []).map((c) =>
           '<button type="button" class="opt-pick' + (pm[c.id] ? ' active' : '') + '" data-opt="' +
