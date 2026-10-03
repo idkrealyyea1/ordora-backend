@@ -9,7 +9,7 @@
 
 const { query } = require('../db/pool');
 
-const PUBLIC_PATH_RE = /^\/uploads\/(logos|covers|items)\/[0-9a-f-]{36}\.(jpg|png|webp)$/;
+const PUBLIC_PATH_RE = /^\/uploads\/(logos|covers|items|hero)\/[0-9a-f-]{36}\.(jpg|png|webp)$/;
 
 async function put(path, mime, buffer) {
   if (!PUBLIC_PATH_RE.test(path)) throw new Error('Refusing to store non-public path');

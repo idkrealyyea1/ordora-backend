@@ -21,7 +21,7 @@ const ALLOWED_TYPES = {
   'image/webp': { ext: 'webp', magic: null }, // checked separately (RIFF....WEBP)
 };
 
-const SUBDIRS = new Set(['logos', 'covers', 'items']);
+const SUBDIRS = new Set(['logos', 'covers', 'items', 'hero']);
 
 function sniffImageType(buffer) {
   if (!buffer || buffer.length < 12) return null;
