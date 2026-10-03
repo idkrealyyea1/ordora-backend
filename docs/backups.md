@@ -35,4 +35,4 @@ TEST_DATABASE_URL=<disposable-pg-url> node --test tests/tenant-isolation.test.js
 
 | Date | Target (non-production) | Result | Operator |
 |------|-------------------------|--------|----------|
-| _pending_ | _pending_ | _pending_ | _pending_ |
+| 2026-10-03 | disposable Postgres 17 in Docker (`rehearsal_src` → `pg_dump -Fc` → `pg_restore` → `rehearsal_dst`) | PASS, clean restore with zero errors; recovered restaurants=2, menu_items=2, orders=3, subscriptions=2 | opencode session |
