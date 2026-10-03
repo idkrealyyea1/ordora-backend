@@ -292,10 +292,12 @@ const uploadImage = [
         await settingsService.updateOwned(id, { coverPath: req.savedImagePublicPath });
         if (old) await deleteUpload(old);
         // Also add to hero images carousel (FR-052)
-        const existingHeroes = await restaurants.getHeroImages(id);
-        const isPrimary = existingHeroes.length === 0;
-        const position = existingHeroes.length > 0 ? Math.max(...existingHeroes.map(h => h.position)) + 1 : 0;
-        await restaurants.addHeroImage(id, req.savedImagePublicPath, { isPrimary, position });
+      const existingHeroes = await restaurants.getHeroImages(id);
+      const isPrimary = existingHeroes.length === 0;
+      // Position is resolved inside addHeroImage over ALL rows, not just the active
+      // ones returned here — a soft-deleted row keeps its position, so deriving it
+      // from the active list would hand back an occupied value and 23505 on insert.
+      await restaurants.addHeroImage(id, req.savedImagePublicPath, { isPrimary });
       } else {
         // items: attach to an owned menu item
         const itemId = v.assertUuid(req.query.itemId, 'itemId');
@@ -477,6 +479,49 @@ async function removeMyHeroImage(req, res) {
   res.status(204).end();
 }
 
+/* ---- Product photo set ----------------------------------------------
+   Tenant comes only from the session (tenantId); the item id from the route.
+   An unowned item yields 404 so existence is not disclosed across tenants. */
+
+async function listItemImages(req, res) {
+  const id = tenantId(req);
+  const item = await menu.getOwned(id, v.assertUuid(req.params.id, 'id'));
+  res.json({ itemImages: await restaurants.listItemImages(id, item.id) });
+}
+
+async function addItemImage(req, res) {
+  const id = tenantId(req);
+  const item = await menu.getOwned(id, v.assertUuid(req.params.id, 'id'));
+  const imagePath = v.validateItemImagePath(req.body && req.body.imagePath);
+  const row = await restaurants.addItemImage(id, item.id, imagePath);
+  res.status(201).json({ itemImage: row });
+}
+
+async function reorderItemImages(req, res) {
+  const id = tenantId(req);
+  const item = await menu.getOwned(id, v.assertUuid(req.params.id, 'id'));
+  const order = req.body && req.body.order;
+  if (!Array.isArray(order)) throw badRequest('order must be an array of image ids');
+  const itemImages = await restaurants.reorderItemImages(id, item.id, order);
+  res.json({ itemImages });
+}
+
+async function removeItemImage(req, res) {
+  const id = tenantId(req);
+  const item = await menu.getOwned(id, v.assertUuid(req.params.id, 'id'));
+  const ok = await restaurants.removeItemImage(id, item.id, v.assertUuid(req.params.imageId, 'imageId'));
+  if (!ok) throw notFound('Image not found');
+  res.status(204).end();
+}
+
+/** Reorder as a permutation. Tenant comes only from the session (tenantId). */
+async function reorderMyHeroImages(req, res) {
+  const order = req.body && req.body.order;
+  if (!Array.isArray(order)) throw badRequest('order must be an array of image ids');
+  const heroImages = await restaurants.reorderHeroImages(tenantId(req), order);
+  res.json({ heroImages });
+}
+
 module.exports = {
   tenantId,
   myRestaurant: asyncHandler(myRestaurant),
@@ -499,6 +544,11 @@ module.exports = {
   listMyHeroImages: asyncHandler(listMyHeroImages),
   addMyHeroImage: asyncHandler(addMyHeroImage),
   updateMyHeroImage: asyncHandler(updateMyHeroImage),
+  reorderMyHeroImages: asyncHandler(reorderMyHeroImages),
+  listItemImages: asyncHandler(listItemImages),
+  addItemImage: asyncHandler(addItemImage),
+  reorderItemImages: asyncHandler(reorderItemImages),
+  removeItemImage: asyncHandler(removeItemImage),
   removeMyHeroImage: asyncHandler(removeMyHeroImage),
   listItems: asyncHandler(listItems),
   createItem: asyncHandler(createItem),

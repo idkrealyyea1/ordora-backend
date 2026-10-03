@@ -49,12 +49,23 @@ const upload = multer({
   },
 });
 
-/** Express middleware: expects multipart field "image" and ?type=logos|covers|items */
+/** Express middleware: expects multipart field "image" and ?type=logos|covers|items|hero
+ *
+ *  Arity must stay 3. Express treats a 4-parameter middleware as an error handler,
+ *  so the namespace cannot be passed as a 4th argument. Routes without a `?type=`
+ *  of their own (the owner hero route) pin it by setting `req.uploadSubdir` first.
+ */
 function handleImageUpload(req, res, next) {
+  // Only multipart requests carry a file. A JSON body (the owner console posts a
+  // path it already holds) must fall through untouched so the controller can
+  // validate it — otherwise attaching this middleware would reject that flow.
+  const isMultipart = (req.headers['content-type'] || '').startsWith('multipart/form-data');
+  if (!isMultipart) return next();
+
   upload.single('image')(req, res, (err) => {
     if (err) return next(err);
     try {
-      const subdir = req.query.type;
+      const subdir = req.uploadSubdir || req.query.type;
       if (!SUBDIRS.has(subdir)) throw badRequest('Invalid image type');
 
       const file = req.file;

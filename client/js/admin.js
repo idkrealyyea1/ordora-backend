@@ -1316,12 +1316,16 @@
       document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
       loadPushCard();
       loadHeroList();
-      document.getElementById('hero-upload-btn').addEventListener('click', uploadHero);
+      document.getElementById('hero-upload-btn').addEventListener('click', openHeroPicker);
       // Clicking anywhere in the add zone opens the picker (no raw input shown).
       document.querySelector('.hero-add').addEventListener('click', (e) => {
         if (e.target.closest('#hero-upload-btn')) return;
-        document.getElementById('hero-file').click();
+        openHeroPicker();
       });
+      // The picker alone does nothing: only a `change` event carries a selection.
+      // Without this the owner picks a file and no upload starts until they click
+      // the button a second time, which reads as "uploads are broken".
+      document.getElementById('hero-file').addEventListener('change', uploadHero);
 
       const c1 = document.getElementById('st-color1');
       const c2 = document.getElementById('st-color2');
@@ -1445,19 +1449,32 @@
     }
   }
 
+  let heroImages = [];
+
   async function loadHeroList() {
     const zone = document.getElementById('hero-list');
     if (!zone) return;
     try {
-      const { heroImages } = await api.get('/api/admin/hero-images');
+      const res = await api.get('/api/admin/hero-images');
+      heroImages = res.heroImages || [];
       if (!heroImages.length) { zone.textContent = esc(I.t('noHeroImages')); return; }
-      zone.innerHTML = heroImages.map((h) =>
-        '<div class="flex-between mb-1 hero-row" style="align-items:center" data-hero-id="' + esc(h.id) + '">' +
-        '<img src="' + esc(h.image_path) + '" alt="" width="88" height="56" style="object-fit:cover;border-radius:10px">' +
-        '<span class="small">' + (h.is_primary ? '<b class="hero-primary">' + esc(I.t('heroPrimary')) + '</b>' : '') + '</span>' +
-        (h.is_primary ? '' : '<button type="button" class="btn btn-outline btn-sm" data-hero-primary>' + esc(I.t('heroMakePrimary')) + '</button>') +
-        '<button type="button" class="btn btn-outline btn-sm" data-hero-remove>' + esc(I.t('heroRemove')) + '</button></div>'
-      ).join('');
+      // Move buttons, not a drag library: reorder has to work on a phone and by
+      // keyboard, and the server applies the order as a permutation.
+      zone.innerHTML =
+        '<ul class="hero-list" role="list">' + heroImages.map((h, i) =>
+          '<li class="hero-row" data-hero-id="' + esc(h.id) + '">' +
+          '<img class="hero-thumb" src="' + esc(h.image_path) + '" alt="" width="72" height="54" loading="lazy">' +
+          '<span class="hero-meta">' +
+          (h.is_primary ? '<b class="hero-primary">' + esc(I.t('heroPrimary')) + '</b>' : '<span class="small muted">' + esc(I.t('heroPosition', { n: i + 1 })) + '</span>') +
+          '</span>' +
+          '<span class="hero-actions">' +
+          (i > 0 ? '<button type="button" class="btn btn-outline btn-sm" data-hero-up aria-label="' + esc(I.t('heroMoveEarlier')) + '">&#8593;</button>' : '') +
+          (i < heroImages.length - 1 ? '<button type="button" class="btn btn-outline btn-sm" data-hero-down aria-label="' + esc(I.t('heroMoveLater')) + '">&#8595;</button>' : '') +
+          (h.is_primary ? '' : '<button type="button" class="btn btn-outline btn-sm" data-hero-primary>' + esc(I.t('heroMakePrimary')) + '</button>') +
+          '<button type="button" class="btn btn-outline btn-sm" data-hero-remove>' + esc(I.t('heroRemove')) + '</button>' +
+          '</span></li>'
+        ).join('') + '</ul>';
+
       zone.querySelectorAll('[data-hero-primary]').forEach((b) => b.addEventListener('click', async () => {
         const id = b.closest('[data-hero-id]').dataset.heroId;
         await api.request('/api/admin/hero-images/' + id, { method: 'PATCH', body: { isPrimary: true } });
@@ -1468,20 +1485,65 @@
         await api.request('/api/admin/hero-images/' + id, { method: 'DELETE' });
         loadHeroList();
       }));
+      zone.querySelectorAll('[data-hero-up]').forEach((b) => b.addEventListener('click', () => moveHero(b, -1)));
+      zone.querySelectorAll('[data-hero-down]').forEach((b) => b.addEventListener('click', () => moveHero(b, 1)));
     } catch (err) { zone.textContent = err.message; }
   }
 
-  async function uploadHero() {
-    const f = document.getElementById('hero-file').files[0];
-    if (!f) return toast('Choose an image first', 'error');
-    const optimized = await App.compressImage(f, { max: 1600, quality: 0.75 });
-    const fd = new FormData();
-    fd.append('image', optimized, 'hero.webp');
+  async function moveHero(button, delta) {
+    const id = button.closest('[data-hero-id]').dataset.heroId;
+    const order = heroImages.map((h) => h.id);
+    const from = order.indexOf(id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= order.length) return;
+    order.splice(to, 0, order.splice(from, 1)[0]);
     try {
-      await api.request('/api/admin/images?type=hero', { method: 'POST', body: fd });
-      document.getElementById('hero-file').value = '';
-      loadHeroList();
+      await api.request('/api/admin/hero-images/order', { method: 'PUT', body: { order } });
+      await loadHeroList();
     } catch (err) { toast(err.message, 'error'); }
+  }
+
+  function openHeroPicker() {
+    const input = document.getElementById('hero-file');
+    if (input) input.click();
+  }
+
+  /* Bound to the input's `change`, so a single selection is the whole interaction.
+     Takes the event (not the file) so a click on the button cannot pass an event
+     object in where a File is expected. */
+  async function uploadHero(e) {
+    const input = document.getElementById('hero-file');
+    const f = input && input.files && input.files[0];
+    if (!f) return;
+    try {
+      // Tell the owner where the platform limit is before spending their upload.
+      const limit = await heroMaxImages();
+      if (limit > 0 && heroImages.length >= limit) return toast(I.t('heroLimitReached'), 'error');
+      const optimized = await App.compressImage(f, { max: 1600, quality: 0.75 });
+      const fd = new FormData();
+      fd.append('image', optimized, 'hero.webp');
+      await api.request('/api/admin/images?type=hero', { method: 'POST', body: fd });
+      loadHeroList();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      // Always clear, so re-picking the same file after a failure fires `change`.
+      if (input) input.value = '';
+    }
+  }
+
+  /* The cap is platform-wide, so read it from the public pricing endpoint rather
+     than inventing a client-side constant that could drift from the server.
+     Returns 0 when unknown, which means "don't pre-emptively block" — the server
+     remains the authority and still rejects an over-limit upload. */
+  async function heroMaxImages() {
+    try {
+      const res = await api.get('/api/pricing');
+      const n = Number(res && res.pricing && res.pricing.max_hero_images);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    } catch (_) {
+      return 0;
+    }
   }
 
   async function uploadSettingImage(file, type) {

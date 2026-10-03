@@ -206,6 +206,15 @@ async function getPublicView(slug) {
   );
   for (const item of items) item.options = optionDefs.get(item.id) || [];
 
+  // Ordered additional photos per item. One LEFT JOIN for the whole menu, not a
+  // query per item. `image_path` is untouched and still element 0 of `images`,
+  // so every existing consumer of image_path keeps working.
+  const itemPhotos = await itemPhotoMap(restaurant.id, items.map((i) => i.id));
+  for (const item of items) {
+    const extra = itemPhotos.get(item.id) || [];
+    item.images = (item.image_path ? [item.image_path] : []).concat(extra);
+  }
+
   const heroImages = await getHeroImages(restaurant.id);
 
   const openNow =
@@ -454,6 +463,16 @@ async function getHeroImagesForSlug(slug) {
   return rows;
 }
 
+/** Next free hero position for a business. Includes soft-deleted rows so a reused
+ *  position can never collide with UNIQUE (business_id, position). */
+async function nextHeroPosition(businessId) {
+  const { rows } = await query(
+    'SELECT COALESCE(MAX(position), -1) + 1 AS next FROM business_hero_images WHERE business_id = $1',
+    [businessId]
+  );
+  return rows[0].next;
+}
+
 async function addHeroImage(businessId, imagePath, options) {
   const { rows: cnt } = await query('SELECT COUNT(*)::int AS n FROM business_hero_images WHERE business_id = $1 AND is_active = true', [businessId]);
   const platform = require('./platform.service');
@@ -464,7 +483,13 @@ async function addHeroImage(businessId, imagePath, options) {
   if (isPrimary) {
     await query('UPDATE business_hero_images SET is_primary = false WHERE business_id = $1', [businessId]);
   }
-  const position = (options && options.position) !== undefined ? options.position : (cnt[0].n > 0 ? Math.max(...(await query('SELECT position FROM business_hero_images WHERE business_id = $1 AND is_active = true', [businessId])).rows.map(r => r.position)) + 1 : 0);
+  // MAX(position) must scan ALL rows, not just active ones: removeHeroImage
+  // soft-deletes and keeps the row, so scanning active rows only hands back a
+  // position that a soft-deleted row still occupies, and UNIQUE (business_id,
+  // position) then rejects the insert with 23505 on add-after-remove.
+  const position = (options && options.position) !== undefined
+    ? options.position
+    : await nextHeroPosition(businessId);
   const { rows } = await query(
     `INSERT INTO business_hero_images (business_id, image_path, position, is_primary, is_active)
      VALUES ($1, $2, $3, $4, true)
@@ -498,7 +523,167 @@ async function removeHeroImage(businessId, imageId) {
     'UPDATE business_hero_images SET is_active = false WHERE business_id = $1 AND id = $2',
     [businessId, imageId]
   );
+  if (rowCount > 0) await ensureHeroPrimary(businessId);
   return rowCount > 0;
+}
+
+/** Map of menu_item_id → ordered additional image paths. One query for the whole
+ *  menu (Constitution XXIV: no N+1). Returns [] for an item with no extra photos. */
+async function itemPhotoMap(businessId, itemIds) {
+  const map = new Map();
+  if (!itemIds.length) return map;
+  const { rows } = await query(
+    `SELECT menu_item_id, image_path
+       FROM menu_item_images
+      WHERE restaurant_id = $1 AND menu_item_id = ANY($2::uuid[])
+      ORDER BY menu_item_id, position`,
+    [businessId, itemIds]
+  );
+  for (const row of rows) {
+    if (!map.has(row.menu_item_id)) map.set(row.menu_item_id, []);
+    map.get(row.menu_item_id).push(row.image_path);
+  }
+  return map;
+}
+
+async function listItemImages(businessId, itemId) {
+  const { rows } = await query(
+    `SELECT id, menu_item_id, image_path, position
+       FROM menu_item_images
+      WHERE restaurant_id = $1 AND menu_item_id = $2
+      ORDER BY position`,
+    [businessId, itemId]
+  );
+  return rows;
+}
+
+async function addItemImage(businessId, itemId, imagePath) {
+  const { rows } = await query(
+    'SELECT COALESCE(MAX(position), -1) + 1 AS next FROM menu_item_images WHERE menu_item_id = $1',
+    [itemId]
+  );
+  const { rows: out } = await query(
+    `INSERT INTO menu_item_images (restaurant_id, menu_item_id, image_path, position)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, menu_item_id, image_path, position`,
+    [businessId, itemId, imagePath, rows[0].next]
+  );
+  return out[0];
+}
+
+/** Apply a reorder as a permutation in one transaction. A bare per-row position
+ *  update would transiently violate UNIQUE (menu_item_id, position). */
+async function reorderItemImages(businessId, itemId, orderedIds) {
+  if (!Array.isArray(orderedIds) || !orderedIds.length) throw badRequest('order must be a non-empty array');
+  const unique = [...new Set(orderedIds)];
+  if (unique.length !== orderedIds.length) throw badRequest('order contains duplicate images');
+  const { rows: owned } = await query(
+    `SELECT id FROM menu_item_images
+      WHERE restaurant_id = $1 AND menu_item_id = $2 AND id = ANY($3::uuid[])`,
+    [businessId, itemId, unique]
+  );
+  if (owned.length !== unique.length) throw badRequest('order contains unknown images');
+  await withTx(async (client) => {
+    const { rows: maxRows } = await client.query(
+      'SELECT COALESCE(MAX(position), 0)::int AS max_pos FROM menu_item_images WHERE menu_item_id = $1',
+      [itemId]
+    );
+    const offset = maxRows[0].max_pos + 1;
+    await client.query(
+      `UPDATE menu_item_images m
+          SET position = $3 + t.rn
+         FROM (
+           SELECT id, row_number() OVER (ORDER BY position, id)::int AS rn
+             FROM menu_item_images WHERE menu_item_id = $1
+         ) t
+        WHERE m.id = t.id AND m.menu_item_id = $1`,
+      [itemId, itemId, offset]
+    );
+    for (let i = 0; i < orderedIds.length; i += 1) {
+      await client.query(
+        'UPDATE menu_item_images SET position = $3 WHERE menu_item_id = $1 AND id = $2',
+        [itemId, orderedIds[i], i]
+      );
+    }
+  });
+  return listItemImages(businessId, itemId);
+}
+
+async function removeItemImage(businessId, itemId, imageId) {
+  const { rowCount } = await query(
+    'DELETE FROM menu_item_images WHERE restaurant_id = $1 AND menu_item_id = $2 AND id = $3',
+    [businessId, itemId, imageId]
+  );
+  return rowCount > 0;
+}
+
+/** Guarantee exactly one active primary. Soft-deleting the primary used to leave a
+ *  business with none, and addHeroImage only defaults isPrimary when the count is 0,
+ *  so no later upload would claim it either. */
+async function ensureHeroPrimary(businessId) {
+  const { rows } = await query(
+    `SELECT id FROM business_hero_images
+      WHERE business_id = $1 AND is_active = true
+      ORDER BY (is_primary) DESC, position ASC`,
+    [businessId]
+  );
+  if (rows.length === 0) return null;
+  const current = await query(
+    'SELECT id FROM business_hero_images WHERE business_id = $1 AND is_active = true AND is_primary = true',
+    [businessId]
+  );
+  if (current.rows.length === 1 && current.rows[0].id === rows[0].id) return rows[0].id;
+  await query('UPDATE business_hero_images SET is_primary = (id = $2) WHERE business_id = $1', [businessId, rows[0].id]);
+  return rows[0].id;
+}
+
+/** Apply a reorder as a permutation in one transaction. Assigning a bare position
+ *  per row transiently violates UNIQUE (business_id, position), so rows are first
+ *  shifted into a negative range that no live position occupies. */
+async function reorderHeroImages(businessId, orderedIds) {
+  if (!Array.isArray(orderedIds) || !orderedIds.length) throw badRequest('order must be a non-empty array');
+  const unique = [...new Set(orderedIds)];
+  if (unique.length !== orderedIds.length) throw badRequest('order contains duplicate images');
+  const { rows: owned } = await query(
+    'SELECT id FROM business_hero_images WHERE business_id = $1 AND is_active = true AND id = ANY($2::uuid[])',
+    [businessId, unique]
+  );
+  if (owned.length !== unique.length) throw badRequest('order contains unknown images');
+  // Two phases inside one transaction.
+  //
+  // Phase 1 parks EVERY row (soft-deleted ones too — they keep their position and
+  // are covered by UNIQUE (business_id, position)) at distinct values above the
+  // current maximum. Phase 2 then writes the requested order for the active rows.
+  // Neither phase can transiently violate the unique constraint.
+  //
+  // The parking range must stay non-negative: hero_images_position_check enforces
+  // position >= 0, so a negative parking range is rejected outright.
+  await withTx(async (client) => {
+    const { rows: maxRows } = await client.query(
+      'SELECT COALESCE(MAX(position), 0)::int AS max_pos FROM business_hero_images WHERE business_id = $1',
+      [businessId]
+    );
+    const offset = maxRows[0].max_pos + 1;
+    await client.query(
+      `UPDATE business_hero_images h
+          SET position = $2 + t.rn
+         FROM (
+           SELECT id, row_number() OVER (ORDER BY position, id)::int AS rn
+             FROM business_hero_images
+            WHERE business_id = $1
+         ) t
+        WHERE h.id = t.id AND h.business_id = $1`,
+      [businessId, offset]
+    );
+    for (let i = 0; i < orderedIds.length; i += 1) {
+      await client.query(
+        'UPDATE business_hero_images SET position = $3 WHERE business_id = $1 AND id = $2',
+        [businessId, orderedIds[i], i]
+      );
+    }
+  });
+  await ensureHeroPrimary(businessId);
+  return getHeroImages(businessId);
 }
 
 module.exports = {
@@ -524,4 +709,11 @@ module.exports = {
   addHeroImage,
   updateHeroImage,
   removeHeroImage,
+  reorderHeroImages,
+  ensureHeroPrimary,
+  itemPhotoMap,
+  listItemImages,
+  addItemImage,
+  reorderItemImages,
+  removeItemImage,
 };

@@ -38,6 +38,13 @@ router.post('/items', admin.createItem);
 router.patch('/items/:id', admin.updateItem);
 router.delete('/items/:id', forbidStaffDelete, admin.deleteItem);
 
+// Product photo set (tenant-scoped; :id is the menu item). The reorder route is
+// declared before the :imageId routes so "order" is never read as an image id.
+router.get('/items/:id/images', admin.listItemImages);
+router.post('/items/:id/images', admin.addItemImage);
+router.put('/items/:id/images/order', admin.reorderItemImages);
+router.delete('/items/:id/images/:imageId', admin.removeItemImage);
+
 // Product option groups (tenant-scoped; ?menuItemId= required for listing)
 router.get('/option-groups', admin.listOptionGroups);
 router.post('/option-groups', admin.createOptionGroup);
@@ -79,6 +86,8 @@ router.put('/delivery-groups', requireCapability('delivery_groups'), requireCapa
 router.get('/hero-images', admin.listMyHeroImages);
 router.post('/hero-images', admin.addMyHeroImage);
 router.patch('/hero-images/:imageId', admin.updateMyHeroImage);
+// Declared before /hero-images/:imageId so "order" is never read as an image id.
+router.put('/hero-images/order', admin.reorderMyHeroImages);
 router.delete('/hero-images/:imageId', admin.removeMyHeroImage);
 
 // Image uploads (?type=logos|covers|items[&itemId=...]|hero)

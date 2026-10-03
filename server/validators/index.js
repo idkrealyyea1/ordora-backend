@@ -770,6 +770,7 @@ module.exports = {
   assertUuid,
   validateLocale,
   validateHeroImagePath,
+  validateItemImagePath,
 };
 
 function validateLocale(value) {
@@ -780,8 +781,21 @@ function validateLocale(value) {
   return locale;
 }
 
+function validateItemImagePath(value) {
+  // Product photos are written into the `items` namespace by the existing
+  // type=items upload, so that is the only namespace accepted here.
+  if (typeof value !== 'string' || !/^\/uploads\/items\/[0-9a-f-]{36}\.(jpg|png|webp)$/.test(value)) {
+    throw badRequest('imagePath is invalid', [{ field: 'imagePath' }]);
+  }
+  return value;
+}
+
 function validateHeroImagePath(value) {
-  if (typeof value !== 'string' || !/^\/uploads\/covers\/[0-9a-f-]{36}\.(jpg|png|webp)$/.test(value)) {
+  // The cover and hero namespaces are both writable to business_hero_images: the
+  // cover uploader posts type=covers, the hero uploader posts type=hero. Accepting
+  // only one of them rejected every real hero path. logos/items are separate
+  // owners and stay rejected.
+  if (typeof value !== 'string' || !/^\/uploads\/(covers|hero)\/[0-9a-f-]{36}\.(jpg|png|webp)$/.test(value)) {
     throw badRequest('imagePath is invalid', [{ field: 'imagePath' }]);
   }
   return value;

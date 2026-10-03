@@ -1,0 +1,385 @@
+/* ============================================================
+   Storefront composition rebuild.
+
+   Reference benchmark (menux.app), structural measurements only —
+   no reference code, assets, text or graphics are reproduced:
+
+     cover image box   46% aspect ratio, 16px radius, object-fit cover
+     identity card     90x90, 12px radius, 4px white ring, pulled up -28px
+     category circles  60px diameter, 10% brand tint, 2px transparent ring
+                       reserved for the active state (zero layout shift)
+     sticky rail       60px tall, circles shrink 60 -> 34px, labels 70 -> 50px
+     item imagery      115px mobile / 215px desktop, 8px radius
+     sheet photo       280px mobile / 350px desktop, 16px radius top only
+     fixed action dock bottom:16px, aligned to the content gutter, 12px radius
+     card radii        16px outer, 8px inner — two radii only
+     elevation         two tiers; everything else is a hairline border
+
+   Restivo keeps its own identity: dark teal/ink, coral, warm yellow, cream.
+   Only the composition, rhythm and hierarchy come from the benchmark.
+   ============================================================ */
+
+/* --- 1. Cover: 46% ratio, rounded on all corners, tinted ring reserved --- */
+.live-page .live-hero{
+  position:relative;margin:0 auto;max-width:var(--sf-max);
+  height:0;padding-bottom:46%;
+  min-height:0;border-radius:16px;
+  overflow:hidden;background:var(--sand);
+  box-shadow:none;                 /* cards stay flat; hairline does the work */
+  border:1px solid var(--line)}
+.live-page .live-hero>img,
+.live-page .live-hero .hero-carousel,
+.live-page .live-hero .hero-slide{position:absolute;inset:0;width:100%;height:100%;border-radius:0}
+.live-page .live-hero>img{object-fit:cover;object-position:center}
+.live-page .live-hero .hero-slide{object-fit:cover;object-position:center}
+/* Scrim only where text sits, so the food stays appetising up top. */
+.live-page .live-hero:after{
+  content:"";position:absolute;inset:auto 0 0;height:46%;border-radius:0 0 16px 16px;
+  background:linear-gradient(transparent,rgba(20,40,43,.72));pointer-events:none}
+.live-page .live-hero-tint{border-radius:16px;pointer-events:none}
+.live-page .live-hero-content{position:absolute;inset:auto 0 0;padding:10px 12px;background:none;min-height:0}
+
+/* Frosted glass dots, bottom-trailing. Hidden entirely for a single photo. */
+.live-page .hero-dots{
+  position:absolute;bottom:12px;inset-inline-end:12px;
+  display:flex;align-items:center;gap:5px;
+  height:20px;padding:0 9px;border-radius:99px;
+  background:rgba(255,255,255,.22);backdrop-filter:blur(8px)}
+.live-page .hero-dots:empty{display:none}
+.live-page .hero-dot{
+  width:7px;height:7px;min-width:7px;padding:0;border-radius:99px;
+  background:rgba(255,255,255,.72);transition:width .25s,background .25s}
+.live-page .hero-dot.active{width:11px;background:#fff}
+
+.live-page .hero-nav{
+  position:absolute;top:50%;translate:0 -50%;z-index:3;
+  width:38px;height:38px;display:none;place-items:center;
+  border-radius:50%;background:rgba(255,255,255,.24);
+  backdrop-filter:blur(8px);color:#fff;font-size:19px;line-height:1;
+  border:0;cursor:pointer}
+.live-page .hero-prev{inset-inline-start:12px}
+.live-page .hero-next{inset-inline-end:12px}
+.live-page .hero-btn{min-height:34px;padding:0 12px;font-size:11px}
+@media(min-width:721px){
+  .live-page .live-hero{padding-bottom:46%;border-radius:16px}
+  .live-page .hero-nav{display:grid}
+}
+
+/* --- 2. Identity card overlapping the cover (the anchor of the page) --- */
+.live-page .id-card{
+  position:relative;z-index:2;
+  display:flex;align-items:flex-start;gap:12px;
+  max-width:var(--sf-max);margin:-28px auto 0;
+  padding:12px 14px;
+  background:var(--paper);
+  border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 8px 8px rgba(0,0,0,.05)}
+/* The logo is a rounded card that straddles the cover edge: the 4px paper ring
+   is what separates it from the photo, so it must not be a bare <img>. */
+.live-page .id-logo-img,.live-page .id-logo{
+  flex:0 0 auto;width:90px;height:90px;
+  border-radius:12px;border:4px solid var(--paper);
+  object-fit:cover;object-position:center;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--display);font-size:34px;font-weight:900;line-height:1}
+.live-page .id-main{min-width:0;padding-top:2px}
+.live-page .id-main h1{
+  margin:0 0 3px;font-family:var(--display);
+  font-size:20px;font-weight:800;line-height:1.24;
+  letter-spacing:-.01em;overflow-wrap:anywhere}
+.live-page .id-main p{margin:0 0 6px;font-size:13px;line-height:1.45;color:rgba(31,52,57,.62)}
+.live-page .live-meta{gap:8px;font-size:12px}
+.live-page .status{
+  position:static;translate:none;
+  display:inline-flex;align-items:center;gap:5px;
+  margin:0 0 6px;padding:3px 9px;border-radius:99px;
+  font-size:11px;font-weight:700;background:rgba(45,183,140,.2);color:#0b6b53}
+.live-page .status.closed{background:rgba(255,54,54,.2);color:#c02626}
+
+/* --- 3. Search as part of the menu, not an incidental field --- */
+.live-page .searchbar{
+  max-width:var(--sf-max);margin:12px auto 0;
+  display:block;border-radius:12px;background:#f6f6f6;
+  border:1px solid var(--line);overflow:hidden}
+.live-page .search{
+  display:flex;align-items:center;gap:8px;
+  min-height:46px;padding:0 14px;background:none;border-radius:0}
+.live-page .search svg{flex:0 0 auto;width:18px;height:18px;color:rgba(31,52,57,.5)}
+.live-page .search input{
+  flex:1 1 auto;min-width:0;height:46px;padding:0;
+  background:none;border:0;outline:0;
+  font-size:15px;font-weight:500;color:var(--ink)}
+.live-page .search input::placeholder{color:rgba(31,52,57,.42);font-weight:400}
+
+/* --- 4. Category rail: 60px circles on a 10% tint, ring pre-reserved --- */
+.live-page .cat-nav{
+  position:sticky;top:56px;z-index:5;
+  max-width:var(--sf-max);margin:12px auto 0;
+  padding:8px 0;background:var(--cream)}
+.live-page .cat-track{
+  display:flex;align-items:flex-start;gap:10px;
+  overflow-x:auto;scroll-behavior:smooth;
+  scrollbar-width:none;-ms-overflow-style:none;
+  padding:2px 2px 6px}
+.live-page .cat-track::-webkit-scrollbar{display:none}
+.live-page .cat{
+  flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:8px;
+  padding:0;background:none;border:0;cursor:pointer;
+  min-height:44px;min-width:44px}
+.live-page .cat-circle{
+  width:60px;height:60px;display:grid;place-items:center;
+  border-radius:50%;
+  background:rgba(39,97,95,.10);
+  /* 2px transparent ring is always present, so activating a category
+     cannot shift anything — no layout jump on scroll. */
+  border:2px solid transparent;
+  transition:border-color .25s,background .25s,transform .25s}
+.live-page .cat-circle svg{width:30px;height:30px;color:var(--teal)}
+.live-page .cat-name{
+  width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  text-align:center;font-size:13px;font-weight:600;line-height:1.25;
+  color:rgba(31,52,57,.78)}
+.live-page .cat[aria-pressed="true"] .cat-circle{
+  border-color:var(--coral);background:rgba(237,107,76,.12)}
+.live-page .cat[aria-pressed="true"] .cat-circle svg{color:var(--coral)}
+.live-page .cat[aria-pressed="true"] .cat-name{color:var(--ink);font-weight:700}
+/* Collapsed sticky variant: the rail shrinks so it eats less of a phone screen. */
+@media(max-width:720px){
+  .live-page .cat-track{gap:8px}
+  .live-page .cat{gap:5px}
+  .live-page .cat-circle{width:52px;height:52px}
+  .live-page .cat-circle svg{width:26px;height:26px}
+  .live-page .cat-name{width:62px;font-size:12px}
+}
+@media(max-width:360px){
+  .live-page .cat-circle{width:48px;height:48px}
+  .live-page .cat-circle svg{width:23px;height:23px}
+  .live-page .cat-name{width:56px;font-size:11px}
+  .live-page .id-logo-img,.live-page .id-logo{width:74px;height:74px;font-size:28px}
+  .live-page .id-card{margin-top:-22px;gap:10px;padding:10px 12px}
+  .live-page .id-main h1{font-size:18px}
+}
+
+/* --- 5. Menu: full width, one column of large imagery on phones --- */
+.live-page #dish-zone{max-width:var(--sf-max);margin:14px auto 0}
+.live-page .dish-zone-wrap{display:flex;flex-direction:column;gap:14px}
+.live-page .menu-section{margin:0 0 4px;scroll-margin-top:118px}
+.live-page .section-head{
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  margin:0 0 10px}
+.live-page .section-head h2{
+  margin:0;font-family:var(--display);font-size:18px;font-weight:800;
+  line-height:1.24;letter-spacing:-.01em}
+.live-page .section-count{
+  flex:0 0 auto;font-size:12px;font-weight:600;color:rgba(31,52,57,.45);
+  font-variant-numeric:tabular-nums}
+
+/* Image on top, generous, non-distorting. Items are separated by whitespace
+   and surface contrast, never by a card border. */
+.live-page .dish{
+  display:flex;flex-direction:column;
+  background:none;border:0;padding:0;margin:0;
+  text-align:start;cursor:pointer;
+  border-radius:12px}
+.live-page .dish-media{
+  position:relative;width:100%;aspect-ratio:4/3;
+  margin:0 0 10px;border-radius:8px;overflow:hidden;
+  background:#ececec}
+@supports not (aspect-ratio:4/3){
+  .live-page .dish-media{height:0;padding-bottom:75%}
+}
+.live-page .dish-img{
+  position:absolute;inset:0;width:100%;height:100%;
+  object-fit:cover;object-position:center}
+/* Fallback keeps the same box so a missing photo never collapses the layout. */
+.live-page .dish-media.no-img::after{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(39,97,95,.10),rgba(237,107,76,.10))}
+
+.live-page .dish-body{min-width:0;display:flex;flex-direction:column;gap:3px}
+.live-page .dish-body h3{
+  margin:0;font-size:15px;font-weight:700;line-height:1.3;color:var(--ink)}
+.live-page .dish-desc{
+  margin:0;font-size:13px;line-height:1.45;color:rgba(31,52,57,.62);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden}
+/* Price is quiet: 15px/600 in the brand accent, never large, never black. */
+.live-page .price-red{
+  margin:2px 0 0;font-size:15px;font-weight:600;color:var(--coral);
+  font-variant-numeric:tabular-nums}
+
+.live-page .dish-badge{
+  position:absolute;inset-block-start:8px;inset-inline-start:8px;z-index:2;
+  display:inline-flex;align-items:center;height:22px;padding:0 9px;
+  border-radius:99px;font-size:11px;font-weight:700;
+  background:rgba(255,255,255,.94);color:var(--ink)}
+.live-page .dish-badge.sold{
+  background:rgba(220,108,62,.14);color:#b4542b}
+/* Sold out reads as unavailable, not broken. */
+.live-page .dish.sold-out .dish-media::before{
+  content:"";position:absolute;inset:0;z-index:1;
+  background:rgba(255,255,255,.5)}
+.live-page .dish.sold-out .dish-body h3,
+.live-page .dish.sold-out .dish-desc{opacity:.55}
+
+.live-page .dish-note{
+  margin:2px 0 0;font-size:11px;font-weight:600;color:rgba(31,52,57,.5)}
+
+/* Inline stepper for an item already in the cart. */
+.live-page .dish .qty{margin:8px 0 0;align-self:flex-start}
+/* Designed empty states: search with no hits, and a menu with no items. */
+.live-page .empty-results,
+.live-page .empty-note{
+  grid-column:1/-1;
+  margin:0;padding:26px 16px;border-radius:12px;
+  background:#f6f6f6;border:1px solid var(--line);text-align:center;
+  font-size:14px;font-weight:600;line-height:1.5;color:rgba(31,52,57,.66)}
+.live-page .live-alert{
+  max-width:var(--sf-max);margin:12px auto 0;
+  padding:12px 14px;border-radius:10px;
+  font-size:13px;font-weight:600;line-height:1.45}
+.live-page .live-alert.warn{
+  background:rgba(220,108,62,.10);color:#8f4322;
+  border:1px solid rgba(220,108,62,.22)}
+.live-page .live-alert.error{
+  background:rgba(255,54,54,.10);color:#a01c1c;
+  border:1px solid rgba(255,54,54,.22)}
+/* Free-delivery nudge sits with the alerts, not floating over the menu. */
+.live-page .freeship{
+  max-width:var(--sf-max);margin:12px auto 0;
+  padding:12px 14px;border-radius:10px;
+  background:rgba(245,200,75,.16);border:1px solid rgba(245,200,75,.42);
+  font-size:13px;font-weight:700;color:#6b5410}
+.live-page .freeship.unlocked{
+  background:rgba(45,183,140,.14);border-color:rgba(45,183,140,.4);color:#0b6b53}
+
+/* --- 6. Product sheet: 65-75% of the viewport, menu stays visible above --- */
+.product-sheet-backdrop{
+  position:fixed;inset:0;z-index:60;
+  background:rgba(25,51,48,.5);opacity:0;transition:opacity .3s ease}
+.product-sheet-backdrop.open{opacity:1}
+.product-sheet{
+  position:fixed;z-index:61;left:0;right:0;bottom:0;
+  width:100%;max-width:560px;margin:0 auto;
+  height:70dvh;max-height:70dvh;   /* spec: 65-75%, never full-screen */
+  display:flex;flex-direction:column;
+  background:#fff;border-radius:16px 16px 0 0;
+  box-shadow:0 -14px 44px rgba(0,0,0,.26);
+  transform:translateY(calc(100% + var(--drag,0px)));
+  transition:transform .32s cubic-bezier(.22,1,.36,1);
+  will-change:transform;overflow:hidden}
+.product-sheet.open{transform:translateY(var(--drag,0px))}
+.product-sheet .sheet-grip{
+  flex:none;width:44px;height:5px;margin:10px auto 0;
+  border-radius:99px;background:rgba(31,52,57,.2)}
+
+/* Photo carousel: 16px radius on the top corners only — it is a sheet. */
+.product-sheet .sheet-media{
+  position:relative;flex:none;height:280px;overflow:hidden;
+  background:#ececec}
+.product-sheet .sheet-track{
+  display:flex;height:100%;overflow-x:auto;
+  scroll-snap-type:x mandatory;scrollbar-width:none}
+.product-sheet .sheet-track::-webkit-scrollbar{display:none}
+.product-sheet .sheet-shot{
+  flex:0 0 100%;height:100%;scroll-snap-align:center;position:relative}
+.product-sheet .sheet-img{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.product-sheet .sheet-shots{
+  position:absolute;bottom:10px;left:50%;translate:-50% 0;z-index:3;
+  display:flex;gap:5px;height:18px;padding:0 9px;border-radius:99px;
+  background:rgba(255,255,255,.22);backdrop-filter:blur(8px)}
+.product-sheet .sheet-shots:empty{display:none}
+.product-sheet .sheet-shots i{
+  width:7px;height:7px;border-radius:99px;background:rgba(255,255,255,.72)}
+.product-sheet .sheet-shots i.on{width:11px;background:#fff}
+.product-sheet .sheet-close{
+  position:absolute;inset-block-start:12px;inset-inline-end:12px;z-index:4;
+  width:36px;height:36px;display:grid;place-items:center;
+  border:0;border-radius:50%;cursor:pointer;
+  background:rgba(255,255,255,.9);color:var(--ink);font-size:17px;line-height:1}
+
+/* One continuous scroll: image, name, price, description, options, details,
+   quantity. Only the action dock stays pinned. */
+.product-sheet .sheet-scroll{
+  flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;padding:14px 16px 8px}
+.product-sheet .sheet-eyebrow{
+  margin:0 0 4px;font-size:12px;font-weight:700;color:var(--coral)}
+.product-sheet .sheet-title{
+  margin:0 0 4px;font-family:var(--display);font-size:22px;font-weight:800;
+  line-height:1.2;letter-spacing:-.01em;overflow-wrap:anywhere}
+.product-sheet .sheet-price{
+  margin:0 0 8px;font-size:16px;font-weight:600;color:var(--coral);
+  font-variant-numeric:tabular-nums}
+.product-sheet .sheet-desc{
+  margin:0 0 14px;font-size:14px;line-height:1.5;color:rgba(31,52,57,.66)}
+.product-sheet .sheet-facts{
+  margin:0 0 14px;padding:12px 14px;border-radius:8px;
+  background:#f6f6f6;border:1px solid var(--line);
+  display:grid;gap:6px;font-size:13px}
+.product-sheet .sheet-facts div{display:flex;gap:8px}
+.product-sheet .sheet-facts b{font-weight:700;color:rgba(31,52,57,.72)}
+
+.product-sheet .group{margin:0 0 14px}
+.product-sheet .group-head{
+  display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+  margin:0 0 8px}
+.product-sheet .group-head h3{margin:0;font-size:16px;font-weight:600;color:var(--ink)}
+.product-sheet .group-hint{
+  flex:0 0 auto;font-size:12px;font-weight:700;color:var(--coral)}
+.product-sheet .group-hint.optional{color:rgba(31,52,57,.45)}
+.product-sheet .group.invalid .group-hint{color:#c02626}
+
+.product-sheet .pick{
+  display:flex;align-items:center;gap:12px;width:100%;
+  min-height:46px;padding:10px 12px;margin:0 0 8px;
+  border:1px solid var(--line);border-radius:8px;
+  background:#fff;cursor:pointer;text-align:start}
+.product-sheet .pick-box{
+  flex:0 0 auto;width:24px;height:24px;border-radius:6px;
+  border:1px solid #ccc;background:#fff;
+  display:grid;place-items:center;transition:background .25s,border-color .25s}
+.product-sheet .pick.radio .pick-box{border-radius:50%}
+.product-sheet .pick-text{flex:1 1 auto;min-width:0;font-size:14px;font-weight:500;color:var(--ink)}
+.product-sheet .pick-text small{
+  display:block;font-size:12px;font-weight:400;color:rgba(31,52,57,.55)}
+.product-sheet .pick-add{flex:0 0 auto;font-size:14px;font-weight:600;color:var(--coral)}
+.product-sheet .pick[aria-pressed="true"]{border-color:var(--teal);background:rgba(39,97,95,.05)}
+.product-sheet .pick[aria-pressed="true"] .pick-box{
+  background:var(--teal);border-color:var(--teal)}
+.product-sheet .pick[aria-pressed="true"] .pick-box::after{
+  content:"";width:11px;height:6px;margin-top:-2px;
+  border-left:2px solid #fff;border-bottom:2px solid #fff;
+  rotate:-45deg}
+.product-sheet .pick.radio[aria-pressed="true"] .pick-box::after{
+  width:12px;height:12px;margin:0;border:0;border-radius:50%;background:#fff;rotate:none}
+
+/* Action dock: pinned, aligned to the content gutter, floating above the fold. */
+.product-sheet .sheet-action{
+  flex:none;display:flex;align-items:center;gap:12px;
+  margin:0;padding:10px 16px;
+  background:#fff;border-top:1px solid var(--line);
+  box-shadow:0 -6px 18px rgba(0,0,0,.06)}
+.product-sheet .sheet-action .qty{margin:0;flex:0 0 auto}
+.product-sheet .co-submit{
+  flex:1 1 auto;min-height:48px;padding:0 16px;
+  border:0;border-radius:10px;cursor:pointer;
+  background:var(--coral);color:#fff;
+  font-size:16px;font-weight:700;white-space:nowrap}
+.product-sheet .co-submit:disabled{opacity:.5;cursor:not-allowed}
+
+@media(prefers-reduced-motion:reduce){
+  .product-sheet{transition:none}
+  .product-sheet.open{transform:translateY(0)}
+  .product-sheet .pick,.product-sheet .pick-box,.product-sheet .hero-dot{transition:none}
+}
+@media(min-width:721px){
+  .product-sheet .sheet-media{height:350px}
+  .product-sheet .sheet-scroll{padding:16px 20px 10px}
+  .live-page .dish-zone-wrap{
+    display:grid;grid-template-columns:1fr 1fr;gap:18px 16px}
+  .live-page .menu-section{grid-column:1/-1}
+  .live-page .section-head{margin-bottom:12px}
+  .live-page .dish-media{aspect-ratio:4/3}
+}

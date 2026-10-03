@@ -3,6 +3,7 @@
 const express = require('express');
 const owner = require('../controllers/owner.controller');
 const { requireAuth, requireOwner, requireOwnerOrStaff } = require('../middleware/auth');
+const { handleImageUpload } = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -62,8 +63,15 @@ router.delete('/restaurant-requests/:id', requireOwner, owner.deleteRestaurantRe
 
 // Hero image management
 router.get('/restaurants/:id/hero-images', requireOwner, owner.listHeroImages);
-router.post('/restaurants/:id/hero-images', requireOwner, owner.addHeroImage);
+// The hero route has no ?type= of its own, so the namespace is pinned to "hero"
+// and the resulting path is validated in the controller — never taken raw from
+// the body. handleImageUpload must keep arity 3 (see the note in upload.js).
+router.post('/restaurants/:id/hero-images', requireOwner,
+  (req, res, next) => { req.uploadSubdir = 'hero'; next(); },
+  handleImageUpload,
+  owner.addHeroImage);
 router.patch('/restaurants/:id/hero-images/:imageId', requireOwner, owner.updateHeroImage);
+router.put('/restaurants/:id/hero-images/order', requireOwner, owner.reorderHeroImages);
 router.delete('/restaurants/:id/hero-images/:imageId', requireOwner, owner.removeHeroImage);
 
 // Translation management

@@ -36,10 +36,12 @@ async function startApp({ orderRateMax, authRateMax } = {}) {
   await migrate();
 
   // Wipe everything between suites (schema_migrations + platform_settings preserved).
+  // menu_item_images cascades from menu_items, listed explicitly so the new
+  // table cannot leak state between suites if it is ever detached.
   await query(`TRUNCATE restaurants, users, orders, order_items, menu_items,
-    categories, restaurant_hours, restaurant_settings, delivery_groups,
-    restaurant_delivery_groups, bookings, "session", notification_events,
-    push_subscriptions RESTART IDENTITY CASCADE`);
+    menu_item_images, categories, restaurant_hours, restaurant_settings,
+    delivery_groups, restaurant_delivery_groups, bookings, "session",
+    notification_events, push_subscriptions RESTART IDENTITY CASCADE`);
 
   const { buildApp } = require('../server/app');
   const app = buildApp();

@@ -14,6 +14,7 @@ const delivery = require('../services/delivery.service');
 const { normalizeSlug } = require('../utils/checks');
 const { conflict, notFound, badRequest } = require('../utils/errors');
 const { assertUuid } = require('../utils/checks');
+const { persistSavedImage } = require('../middleware/upload');
 const { sendCsv } = require('../utils/csv');
 const { asyncHandler } = require('../utils/errors');
 const v = require('../validators');
@@ -600,6 +601,7 @@ module.exports = {
   addHeroImage: asyncHandler(addHeroImage),
   updateHeroImage: asyncHandler(updateHeroImage),
   removeHeroImage: asyncHandler(removeHeroImage),
+  reorderHeroImages: asyncHandler(reorderHeroImages),
   listTranslations: asyncHandler(listTranslations),
   updateTranslation: asyncHandler(updateTranslation),
 };
@@ -610,8 +612,18 @@ async function listHeroImages(req, res) {
 }
 
 async function addHeroImage(req, res) {
-  const imagePath = req.savedImagePublicPath || (req.body && req.body.imagePath);
-  if (!imagePath) throw badRequest('No image uploaded');
+  // The route pins the upload namespace to "hero", so a validated upload gives us a
+  // trusted path. A body-supplied path is accepted only for callers that already
+  // hold one, and only after the same validator every other write path uses — an
+  // arbitrary client string must never reach the database.
+  let imagePath = req.savedImagePublicPath;
+  if (imagePath) {
+    await persistSavedImage(req);
+  } else if (req.body && req.body.imagePath) {
+    imagePath = v.validateHeroImagePath(req.body.imagePath);
+  } else {
+    throw badRequest('No image uploaded');
+  }
   const row = await restaurants.addHeroImage(req.params.id, imagePath);
   res.status(201).json({ heroImage: row });
 }
@@ -630,6 +642,15 @@ async function removeHeroImage(req, res) {
   const ok = await restaurants.removeHeroImage(req.params.id, req.params.imageId);
   if (!ok) throw notFound('Hero image not found');
   res.status(204).end();
+}
+
+/** Reorder as a permutation. The target business comes from the route param, which
+ *  requireOwner authorises; the service additionally scopes every read/write to it. */
+async function reorderHeroImages(req, res) {
+  const order = req.body && req.body.order;
+  if (!Array.isArray(order)) throw badRequest('order must be an array of image ids');
+  const heroImages = await restaurants.reorderHeroImages(req.params.id, order);
+  res.json({ heroImages });
 }
 
 async function listTranslations(req, res) {
