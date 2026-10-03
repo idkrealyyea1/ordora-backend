@@ -48,7 +48,7 @@ h1,h2,h3,p{margin:0}
 .hero-desc{max-width:580px;margin-top:25px;font-size:18px;line-height:2;color:rgba(31,52,57,.65)}
 .hero-actions{display:flex;align-items:center;gap:18px;margin-top:28px}.text-btn{background:none;color:rgba(31,52,57,.65);font-size:14px;font-weight:800}.text-btn:hover{color:var(--coral)}
 .proof{display:flex;align-items:center;gap:14px;margin-top:45px;padding-top:18px;border-top:1px solid var(--line);font-size:12px;line-height:1.8;color:rgba(31,52,57,.55)}
-.avatars{display:flex;direction:ltr}.avatars b{display:grid;place-items:center;width:32px;height:32px;border:2px solid var(--cream);border-radius:50%;margin-left:-7px;color:var(--cream);font-size:11px}.avatars b:nth-child(1){background:var(--teal)}.avatars b:nth-child(2){background:var(--coral)}.avatars b:nth-child(3){background:#d39750}
+
 .phone-preview{position:relative;height:500px;max-width:430px;margin:auto}
 .phone{position:absolute;left:50%;top:0;width:276px;height:480px;transform:translateX(-50%);padding:10px;border:7px solid var(--ink);border-radius:38px;background:var(--cream);box-shadow:16px 20px 0 var(--yellow);animation:float 4.8s ease-in-out infinite}
 .phone-screen{height:100%;overflow:hidden;border-radius:29px;background:var(--sand)}
@@ -104,27 +104,27 @@ html[dir="ltr"] .ticker-track{animation-name:tick-ltr}
 .modal-form .coral-btn:disabled{opacity:.6;cursor:wait}
 
 /* ---- Family band: live restaurants, same design language ---- */
-.family{padding:110px 0;background:var(--sand)}
+
 .family-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:36px}
 .family-grid:empty{display:none}
 .family-card{display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line);border-radius:24px;background:var(--paper);box-shadow:0 8px 24px rgba(31,52,57,.06);transition:transform .25s ease}
 .family-card:hover{transform:translateY(-4px)}
-.family-cover{display:block;position:relative;height:150px;overflow:hidden;background:#e5a55f}
+
 .family-logo{position:absolute;bottom:10px;inset-inline-start:12px;width:46px;height:46px;border-radius:14px;overflow:hidden;background:var(--paper);box-shadow:3px 4px 0 rgba(31,52,57,.25);display:grid;place-items:center}
 .family-logo img{width:100%;height:100%;object-fit:cover}
 .family-logo b{font-family:var(--display);font-size:20px;font-weight:900;color:var(--coral)}
-.family-cover img{width:100%;height:100%;object-fit:cover}
-.family-fallback{display:grid;place-items:center;height:100%;font-size:44px}
-.family-body{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px}
-.family-body strong{display:block;font-family:var(--display);font-size:16px;font-weight:900}
-.family-body small{display:block;margin-top:2px;color:rgba(31,52,57,.55);font-size:11px;font-weight:700}
+
+
+
+
+
 .family-pill{font-style:normal;white-space:nowrap;font-size:10px;font-weight:900;padding:6px 12px;border-radius:999px;background:#dce8df;color:var(--teal)}
 .family-pill:not(.open){background:#f3ead7;color:#7a5b17}
-.family-cta{margin-top:28px}
-.family-cta .dark-btn{display:inline-block;text-decoration:none}
+
+
 .family-empty{color:rgba(31,52,57,.55);font-size:14px}
-@media(max-width:900px){.family-grid{grid-template-columns:1fr 1fr}}
-@media(max-width:620px){.family{padding:85px 0}.family-grid{grid-template-columns:1fr}}
+
+
 
 /* ---- Real storefront page: same design language, live backend data ---- */
 .hidden{display:none!important}
