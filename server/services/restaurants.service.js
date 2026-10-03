@@ -46,10 +46,10 @@ async function createRestaurant({ name, slug, maxMenuItems, subscriptionEndsAt, 
     if (planRes.rows[0]) {
       const end = subscriptionEndsAt || null;
       await client.query(
-        `INSERT INTO subscriptions
-           (restaurant_id, plan_id, status, current_period_start, current_period_end, grace_until)
-         VALUES ($1, $2, 'active', now(), $3,
-           CASE WHEN $3 IS NULL THEN NULL ELSE ($3::timestamptz + INTERVAL '7 days') END)
+          `INSERT INTO subscriptions
+             (restaurant_id, plan_id, status, current_period_start, current_period_end, grace_until)
+           VALUES ($1, $2, 'active', now(), $3::timestamptz,
+             CASE WHEN $3::timestamptz IS NULL THEN NULL ELSE ($3::timestamptz + INTERVAL '7 days') END)
           ON CONFLICT (restaurant_id) DO NOTHING`,
         [restaurant.id, planRes.rows[0].id, end]
       );

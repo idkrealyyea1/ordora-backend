@@ -194,8 +194,8 @@ async function activate({ restaurantId, planKey, periodEndsAt, reason, actorId }
     const now = new Date().toISOString();
     const { rows } = await client.query(
       `UPDATE subscriptions
-       SET plan_id = $2, status = 'active', current_period_start = $3, current_period_end = $4,
-           grace_until = CASE WHEN $4 IS NULL THEN NULL ELSE ($4::timestamptz + INTERVAL '7 days') END,
+       SET plan_id = $2, status = 'active', current_period_start = $3, current_period_end = $4::timestamptz,
+           grace_until = CASE WHEN $4::timestamptz IS NULL THEN NULL ELSE ($4::timestamptz + INTERVAL '7 days') END,
            cancelled_at = NULL, cancel_effective_at = NULL,
            suspended_at = NULL, suspend_reason = '', updated_at = $3
        WHERE restaurant_id = $1 RETURNING *`,

@@ -20,6 +20,12 @@ before(async () => {
   const ownerCookie = await env.login('root', 'owner-password-123');
   fx = await env.createRestaurantFixture(ownerCookie, { name: 'Enum Cafe', slug: 'enum-cafe' });
 
+  // Hours are not under test here: bypass the clock so this file passes at any hour.
+  const hrs = await env.req('/api/admin/settings', {
+    method: 'PATCH', cookie: fx.adminCookie, body: { ignoreOpeningHours: true },
+  });
+  assert.strictEqual(hrs.status, 200);
+
   const order = await env.req('/api/restaurants/' + fx.slug + '/orders', {
     method: 'POST',
     body: {

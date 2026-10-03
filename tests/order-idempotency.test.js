@@ -25,6 +25,13 @@ before(async () => {
   const ownerCookie = await env.login('root', 'owner-password-123');
   fx = await env.createRestaurantFixture(ownerCookie, { name: 'Race Diner', slug: 'race-diner' });
   fx2 = await env.createRestaurantFixture(ownerCookie, { name: 'Race Diner Two', slug: 'race-diner-two' });
+  // Hours are not under test here: bypass the clock so this file passes at any hour.
+  for (const f of [fx, fx2]) {
+    const r = await env.req('/api/admin/settings', {
+      method: 'PATCH', cookie: f.adminCookie, body: { ignoreOpeningHours: true },
+    });
+    assert.strictEqual(r.status, 200);
+  }
 });
 
 after(async () => {

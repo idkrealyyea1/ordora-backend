@@ -24,6 +24,14 @@ before(async () => {
   A = await env.createRestaurantFixture(ownerCookie, { name: 'Alpha Sushi', slug: 'alpha-sushi' });
   B = await env.createRestaurantFixture(ownerCookie, { name: 'Beta Pizza', slug: 'beta-pizza' });
 
+  // Hours are not under test here: bypass the clock so this file passes at any hour.
+  for (const f of [A, B]) {
+    const r = await env.req('/api/admin/settings', {
+      method: 'PATCH', cookie: f.adminCookie, body: { ignoreOpeningHours: true },
+    });
+    assert.strictEqual(r.status, 200);
+  }
+
   // Place a real order at B through the public API.
   const order = await env.req('/api/restaurants/' + B.slug + '/orders', {
     method: 'POST',
