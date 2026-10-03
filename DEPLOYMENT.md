@@ -321,3 +321,23 @@ Database changes = new file in `database/migrations/` → re-run the E2 command 
 ---
 
 *Verified against Wasmer documentation: August 2026.*
+
+---
+
+# Part D — Production deploy pipeline (Task 17, FR-018)
+
+> No production change ships without explicit human approval. Automation stops
+> at validation; a human runs the deploy.
+
+```
+CHECK → TEST → MIGRATION VALIDATION → STARTUP VALIDATION → DEPLOY → HEALTH CHECK → SMOKE TEST → MONITOR
+```
+
+1. **CHECK**: `npm run check` — 0 failures required.
+2. **TEST**: `TEST_DATABASE_URL=<disposable> node --test tests/` — full suite green.
+3. **MIGRATION VALIDATION**: `node database/migrate.js` against a disposable copy first; confirm idempotent re-run skips (`skip <file> (already applied)`), no destructive statements without a documented path.
+4. **STARTUP VALIDATION**: boot against the disposable DB; missing `SESSION_SECRET`/DB fails fast with a naming-but-not-leaking message; `GET /api/readyz` is 200 only after the DB answers.
+5. **DEPLOY**: `wasmer deploy --build-remote` (keep `app.yaml` `name: restaurants`).
+6. **HEALTH CHECK**: `GET /api/healthz` → 200 (liveness), then `GET /api/readyz` → 200 (traffic may flow).
+7. **SMOKE TEST**: `/`, `/app/`, `/restaurant/:slug`, `/track`, login, admin + owner dashboards, `/api/pricing`, `/robots.txt`, `/sitemap.xml`, unknown path → `404.html` (JSON for `/api/*`).
+8. **MONITOR**: watch logs for `app.listening` / `migrate.failed` / `boot.db_unreachable`; hard-refresh CDN (≈1h cache) and re-smoke.

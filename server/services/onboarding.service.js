@@ -9,6 +9,7 @@
 
 const { query } = require('../db/pool');
 const { AppError } = require('../utils/errors');
+const observe = require('../utils/observe');
 const businessTypes = require('./business-types.service');
 
 const STEP_ORDER = ['type', 'info', 'setup', 'product', 'fulfillment', 'hours', 'review', 'done'];
@@ -61,7 +62,7 @@ async function setStep(restaurantId, step) {
   if (!business) throw new AppError(404, 'NO_BUSINESS', 'No business is linked to this account');
   if (business.onboarding_status !== 'completed') {
     await query('UPDATE restaurants SET onboarding_step = $2 WHERE id = $1', [restaurantId, step]);
-    console.log('[onboarding] step', business.slug, step);
+    observe.info('onboarding.step', { restaurantId, slug: business.slug, step });
     return getState(restaurantId);
   }
   return getState(restaurantId);
@@ -83,7 +84,7 @@ async function complete(restaurantId) {
     `UPDATE restaurants SET onboarding_status = 'completed', onboarding_step = 'done' WHERE id = $1`,
     [restaurantId]
   );
-  console.log('[onboarding] completed', business.slug);
+  observe.info('onboarding.completed', { restaurantId, slug: business.slug });
   return finishedPayload({ ...business, onboarding_status: 'completed' });
 }
 

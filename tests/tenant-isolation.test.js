@@ -188,3 +188,37 @@ test('owner password reset revokes the target session immediately', async () => 
   });
   assert.strictEqual(relogin.status, 200);
 });
+
+test('replaying B\u2019s idempotency key against A\u2019s storefront never resolves B\u2019s order', async () => {
+  const key = 'eeeeeeee-ffff-4000-8000-222222222222';
+  const atB = await env.req('/api/restaurants/' + B.slug + '/orders', {
+    method: 'POST',
+    body: {
+      customerName: 'Key Owner',
+      customerWhatsapp: '15550009999',
+      orderType: 'pickup',
+      submissionKey: key,
+      items: [{ itemId: B.itemId, quantity: 1 }],
+    },
+  });
+  assert.strictEqual(atB.status, 201);
+
+  // Same key, other tenant: must create A's own order (or reject) — never B's row.
+  const atA = await env.req('/api/restaurants/' + A.slug + '/orders', {
+    method: 'POST',
+    body: {
+      customerName: 'Key Owner',
+      customerWhatsapp: '15550009999',
+      orderType: 'pickup',
+      submissionKey: key,
+      items: [{ itemId: A.itemId, quantity: 1 }],
+    },
+  });
+  assert.strictEqual(atA.status, 201);
+  assert.notStrictEqual(atA.data.order.code, atB.data.order.code, 'no cross-tenant key resolution');
+
+  // Admin A listing orders still sees nothing from B.
+  const list = await env.req('/api/admin/orders', { cookie: A.adminCookie });
+  const codes = (list.data.orders || []).map((o) => o.code);
+  assert.ok(!codes.includes(atB.data.order.code), 'A must not see B order codes');
+});

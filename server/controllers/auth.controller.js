@@ -11,6 +11,7 @@ const config = require('../../config');
 const { unauthorized } = require('../utils/errors');
 const { validateLogin } = require('../validators');
 const { asyncHandler } = require('../utils/errors');
+const observe = require('../utils/observe');
 
 async function login(req, res) {
   const { identifier, password } = validateLogin(req.body);
@@ -18,7 +19,9 @@ async function login(req, res) {
   const user = await users.findByIdentifier(identifier);
   const ok = user && user.is_active ? await users.verifyPassword(password, user.password_hash) : false;
 
+  // Failed attempts are traced without the identifier (no PII, no enumeration signal).
   if (!ok || !user.is_active) {
+    observe.warn('auth.login_failed', {});
     throw unauthorized('Invalid credentials');
   }
   if (user.role === 'admin') {
@@ -39,6 +42,7 @@ async function login(req, res) {
     req.session.regenerate((err) => (err ? reject(err) : resolve()));
   });
   req.session.userId = user.id;
+  observe.info('auth.login', { userId: user.id, role: user.role });
 
   res.json({
     user: {
@@ -52,10 +56,12 @@ async function login(req, res) {
 }
 
 async function logout(req, res) {
+  const userId = req.session.userId || null;
   if (!req.session.userId) return res.json({ ok: true });
   await new Promise((resolve) => {
     req.session.destroy(() => resolve());
   });
+  observe.info('auth.logout', { userId });
   res.clearCookie(config.cookieName);
   res.json({ ok: true });
 }

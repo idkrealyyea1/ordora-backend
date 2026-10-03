@@ -11,6 +11,7 @@
 
 const { query, withTx } = require('../db/pool');
 const { conflict, notFound } = require('../utils/errors');
+const observe = require('../utils/observe');
 
 const STATUSES = ['trial', 'active', 'grace', 'expired', 'cancelled', 'suspended'];
 /* Explicit transitions only; anything else is 409 INVALID_TRANSITION. */
@@ -205,7 +206,7 @@ async function activate({ restaurantId, planKey, periodEndsAt, reason, actorId }
       restaurantId, actorId, action: oldSub.status === 'trial' ? 'trial_converted' : 'subscription_activated',
       oldSub, newSub: rows[0], reason,
     });
-    console.log('[subscriptions] activated', restaurantId, planKey);
+    observe.info('subscription.activated', { restaurantId, planKey });
     return rows[0];
   });
 }
@@ -238,7 +239,7 @@ async function extend({ restaurantId, extendDays, newEndsAt, reason, actorId }) 
       restaurantId, actorId, action: isTrial ? 'trial_extended' : 'subscription_extended',
       oldSub, newSub: rows[0], reason,
     });
-    console.log('[subscriptions] extended', restaurantId, end);
+    observe.info('subscription.extended', { restaurantId, end });
     return rows[0];
   });
 }
@@ -262,7 +263,7 @@ async function cancel({ restaurantId, effective, reason, actorId }) {
     );
     if (effective === 'now') await mirrorAccessEnd(client, restaurantId, now);
     await writeEvent(client, { restaurantId, actorId, action: 'subscription_cancelled', oldSub, newSub: rows[0], reason });
-    console.log('[subscriptions] cancelled', restaurantId, effective);
+    observe.info('subscription.cancelled', { restaurantId, effective });
     return rows[0];
   });
 }
@@ -281,7 +282,7 @@ async function suspend({ restaurantId, reason, actorId }) {
     );
     await mirrorAccessEnd(client, restaurantId, now);
     await writeEvent(client, { restaurantId, actorId, action: 'subscription_suspended', oldSub, newSub: rows[0], reason });
-    console.log('[subscriptions] suspended', restaurantId);
+    observe.info('subscription.suspended', { restaurantId });
     return rows[0];
   });
 }
@@ -302,7 +303,7 @@ async function reactivate({ restaurantId, reason, actorId }) {
     const eff = derive(rows[0], null);
     await mirrorAccessEnd(client, restaurantId, eff.accessEndsAt);
     await writeEvent(client, { restaurantId, actorId, action: 'subscription_reactivated', oldSub, newSub: rows[0], reason });
-    console.log('[subscriptions] reactivated', restaurantId);
+    observe.info('subscription.reactivated', { restaurantId });
     return rows[0];
   });
 }

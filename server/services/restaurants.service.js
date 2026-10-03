@@ -7,6 +7,7 @@
 const { query, withTx } = require('../db/pool');
 const { conflict, notFound, badRequest } = require('../utils/errors');
 const { isOpenNow, timeToHhmm } = require('../utils/datetime');
+const observe = require('../utils/observe');
 // Keep revenue semantics identical to orders.service (confirmed+ only).
 const { REVENUE_SQL } = require('./orders.service');
 const delivery = require('./delivery.service');
@@ -49,10 +50,11 @@ async function createRestaurant({ name, slug, maxMenuItems, subscriptionEndsAt, 
            (restaurant_id, plan_id, status, current_period_start, current_period_end, grace_until)
          VALUES ($1, $2, 'active', now(), $3,
            CASE WHEN $3 IS NULL THEN NULL ELSE ($3::timestamptz + INTERVAL '7 days') END)
-         ON CONFLICT (restaurant_id) DO NOTHING`,
+          ON CONFLICT (restaurant_id) DO NOTHING`,
         [restaurant.id, planRes.rows[0].id, end]
       );
     }
+    observe.info('business.created', { restaurantId: restaurant.id, slug: restaurant.slug });
     return restaurant;
   });
 }

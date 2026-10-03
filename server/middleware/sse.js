@@ -55,4 +55,22 @@ function broadcast(restaurantId, event, data) {
   }
 }
 
-module.exports = { addClient, broadcast };
+/** Close every open stream (graceful shutdown); safe to call with none open. */
+function closeAll() {
+  for (const set of clients.values()) {
+    for (const res of set) {
+      try {
+        res.end();
+      } catch {
+        /* already gone */
+      }
+    }
+  }
+  clients.clear();
+  if (heartbeat) {
+    clearInterval(heartbeat);
+    heartbeat = null;
+  }
+}
+
+module.exports = { addClient, broadcast, closeAll };

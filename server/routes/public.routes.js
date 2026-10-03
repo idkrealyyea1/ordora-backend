@@ -6,7 +6,7 @@ const restaurants = require('../services/restaurants.service');
 const ordersService = require('../services/orders.service');
 const bookingsService = require('../services/bookings.service');
 const sse = require('../middleware/sse');
-const { orderLimiter } = require('../middleware/ratelimit');
+const { orderLimiter, authLimiter } = require('../middleware/ratelimit');
 const { notFound } = require('../utils/errors');
 const { asyncHandler } = require('../utils/errors');
 const v = require('../validators');
@@ -90,9 +90,10 @@ router.post(
   })
 );
 
-/** Customer order tracking by public code. */
+/** Customer order tracking by public code (rate-limited: codes are enumerable). */
 router.get(
   '/orders/track/:code',
+  authLimiter,
   asyncHandler(async (req, res) => {
     const code = String(req.params.code).trim();
     if (!/^[A-Za-z0-9]{6,12}$/.test(code)) throw notFound('No order found for this tracking code');
@@ -137,6 +138,26 @@ router.post(
 );
 
 router.get('/healthz', (req, res) => res.json({ ok: true }));
+
+/**
+ * Readiness: liveness (`/healthz`) says the process is alive; this says it
+ * can actually serve traffic (database answers a bounded probe). Never
+ * exposes connection details, credentials, or tenant data.
+ */
+router.get(
+  '/readyz',
+  asyncHandler(async (req, res) => {
+    const { pool } = require('../db/pool');
+    const probe = pool.query('SELECT 1');
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('probe timeout')), 2000));
+    try {
+      await Promise.race([probe, timeout]);
+      res.json({ ok: true, checks: { db: 'up' } });
+    } catch {
+      res.status(503).json({ ok: false, checks: { db: 'down' } });
+    }
+  })
+);
 
 router.get('/translations', asyncHandler(async (req, res) => {
   const locale = String(req.query.locale || 'ar').trim().toLowerCase();
