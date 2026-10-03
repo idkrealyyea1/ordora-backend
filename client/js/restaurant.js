@@ -211,12 +211,16 @@
         '<button data-mode="delivery"' + (orderType === 'delivery' ? ' class="active" aria-pressed="true"' : ' aria-pressed="false"') + '>' + esc(t().delivery) + '</button>' +
         '<button data-mode="pickup"' + (orderType === 'pickup' ? ' class="active" aria-pressed="true"' : ' aria-pressed="false"') + '>' + esc(t().pickup) + '</button></div>'
       : '';
+    // Language pinned to the far end; search + fulfilment pinned opposite.
+    // `margin-inline-start:auto` on the group keeps them at the edges in
+    // both RTL and LTR without duplicating direction-specific CSS.
     $head().innerHTML =
-      '<div class="topbar">' + fulfillment +
+      '<div class="topbar">' +
+      '<button class="lang-seg" id="lang-btn" aria-label="Language / اللغة"><span aria-hidden="true">' + flag + '</span> ' + esc(T[other].langName) + '</button>' +
       '<div class="topbar-actions">' +
       '<button class="search-toggle" id="search-toggle" aria-label="' + esc(t().searchLabel) + '" aria-expanded="false">' +
         '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>' +
-      '<button class="lang-seg" id="lang-btn" aria-label="Language / اللغة"><span aria-hidden="true">' + flag + '</span> ' + esc(T[other].langName) + '</button>' +
+      fulfillment +
       '</div></div>';
     document.getElementById('lang-btn').addEventListener('click', () => setLang(other));
     document.getElementById('search-toggle').addEventListener('click', () => {
@@ -463,14 +467,36 @@
     sheetItem = item;
     sheetQty = 1;
     renderSheet();
+    showSheet();
+  }
+  /* Slide-up lifecycle. The sheet is built off-screen (translateY(100%));
+     `.open` transitions it in. Kept separate from renderSheet() because
+     renderSheet() re-runs on every quantity/pick change and must NOT
+     replay the animation. */
+  function showSheet() {
+    const root = document.getElementById('product-sheet-root');
+    if (!root) return;
+    const backdrop = root.querySelector('.product-sheet-backdrop');
+    const panel = root.querySelector('.product-sheet');
+    if (backdrop) backdrop.classList.add('open');
+    if (panel) requestAnimationFrame(() => panel.classList.add('open'));
   }
   function closeSheet() {
-    sheetItem = null;
     const el = document.getElementById('product-sheet-root');
-    if (el) el.innerHTML = '';
+    const panel = el && el.querySelector('.product-sheet');
+    const backdrop = el && el.querySelector('.product-sheet-backdrop');
+    if (panel) panel.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('open');
     document.body.classList.remove('sheet-open');
-    const wasCard = document.querySelector('[data-open="' + (lastSheetId || '') + '"]');
-    if (wasCard) { try { wasCard.focus({ preventScroll: true }); } catch (_) {} }
+    // Wait for the slide-out before tearing the DOM down.
+    const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    setTimeout(() => {
+      sheetItem = null;
+      const root = document.getElementById('product-sheet-root');
+      if (root) root.innerHTML = '';
+      const wasCard = document.querySelector('[data-open="' + (lastSheetId || '') + '"]');
+      if (wasCard) { try { wasCard.focus({ preventScroll: true }); } catch (_) {} }
+    }, reduced ? 0 : 300);
   }
   let lastSheetId = null;
   function renderSheet() {
@@ -492,6 +518,8 @@
     }
     const optsHtml = hasOpts ? pickerHtml(item) : '';
     const total = money(estimateSheetTotal(item, sheetQty));
+    // Capture open state BEFORE innerHTML replaces the nodes below.
+    const wasOpen = root.querySelector('.product-sheet.open') !== null;
     root.innerHTML =
       '<div class="product-sheet-backdrop" id="sheet-backdrop"></div>' +
       '<section class="product-sheet" role="dialog" aria-modal="true" aria-label="' + esc(item.name) + '">' +
@@ -512,9 +540,17 @@
             esc(t().add) + ' · <span id="sheet-total-val">' + esc(total) + '</span></button></div>' +
       '</section>';
     document.body.classList.add('sheet-open');
+    // Re-renders (quantity / option changes) must not replay the entrance:
+    // if the sheet was already open, restore the class synchronously.
+    if (wasOpen) {
+      root.querySelector('.product-sheet').classList.add('open');
+      root.querySelector('.product-sheet-backdrop').classList.add('open');
+    }
     document.getElementById('sheet-backdrop').addEventListener('click', closeSheet);
     document.getElementById('sheet-close').addEventListener('click', closeSheet);
     // Swipe down on the grip/media to dismiss (touch only, no library).
+    // Uses a CSS custom property for the drag offset so it composes with the
+    // sheet's own transform (which centres the panel on desktop).
     (function () {
       const panel = root.querySelector('.product-sheet');
       let startY = null;
@@ -522,11 +558,11 @@
       panel.addEventListener('touchmove', (e) => {
         if (startY === null) return;
         const dy = e.touches[0].clientY - startY;
-        if (dy > 0) panel.style.transform = 'translateY(' + Math.min(dy, 160) + 'px)';
+        if (dy > 0) panel.style.setProperty('--drag', Math.min(dy, 160) + 'px');
       }, { passive: true });
       panel.addEventListener('touchend', (e) => {
         const dy = e.changedTouches[0].clientY - startY;
-        panel.style.transform = '';
+        panel.style.setProperty('--drag', '0px');
         startY = null;
         if (dy > 110) closeSheet();
       });
