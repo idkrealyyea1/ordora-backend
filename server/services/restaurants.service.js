@@ -235,6 +235,10 @@ async function getPublicView(slug) {
       currency: settings.currency.toUpperCase(),
       deliveryFeeCents: settings.delivery_fee_cents,
       deliveryEnabled: settings.delivery_enabled !== false,
+      // Free-delivery threshold is public: the storefront shows progress
+      // toward it. The server recomputes the fee at checkout regardless.
+      freeDeliveryEnabled: settings.free_delivery_enabled === true,
+      freeDeliveryThresholdCents: settings.free_delivery_threshold_cents || 0,
       storefrontLanguage: settings.storefront_language || 'ar',
     },
     heroImages: heroImages.map((h) => ({ imagePath: h.image_path, position: h.position, isPrimary: h.is_primary })),

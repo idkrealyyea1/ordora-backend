@@ -98,6 +98,14 @@ test('invalid configuration rejected', async () => {
   assert.strictEqual((await settings(fx.adminCookie, { freeDeliveryEnabled: 'yes-please' })).status, 400);
 });
 
+test('public menu view exposes the free-delivery fields the storefront reads', async () => {
+  await settings(fx.adminCookie, { freeDeliveryEnabled: true, freeDeliveryThresholdCents: 2500 });
+  const view = await env.req('/api/restaurants/' + fx.slug + '/menu');
+  assert.strictEqual(view.status, 200);
+  assert.strictEqual(view.data.settings.freeDeliveryEnabled, true);
+  assert.strictEqual(view.data.settings.freeDeliveryThresholdCents, 2500);
+});
+
 test('tenant isolation: A cannot change B free-delivery settings', async () => {
   const beforeB = await env.req('/api/admin/settings', { cookie: fxB.adminCookie });
   // A PATCHes only its own tenant record (derived from session).
