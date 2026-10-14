@@ -142,15 +142,10 @@
     const drawer = document.getElementById('nav-drawer');
     const overlay = document.getElementById('nav-overlay');
     if (!burger || !drawer) return;
-    // Drawer header: business identity + explicit close (mobile-first polish).
-    const drawerBrand = document.getElementById('nav-drawer-brand');
-    const drawerClose = document.getElementById('nav-drawer-close');
-    if (drawerBrand) drawerBrand.textContent = (info && info.restaurant && info.restaurant.name) || 'Restivo';
     // Mirror side links into the drawer so both stay in sync.
     for (const btn of document.querySelectorAll('.dash-side [data-tab]')) {
       const b = btn.cloneNode(true);
       b.classList.remove('active');
-      b.setAttribute('data-drawer-tab', btn.dataset.tab);
       b.addEventListener('click', () => { closeDrawer(); switchTab(btn.dataset.tab); });
       drawer.appendChild(b);
     }
@@ -168,7 +163,6 @@
       setTimeout(() => { if (!drawer.classList.contains('open')) drawer.hidden = true; }, 200);
     }
     burger.addEventListener('click', () => (drawer.classList.contains('open') ? closeDrawer() : openDrawer()));
-    if (drawerClose) drawerClose.addEventListener('click', closeDrawer);
     overlay.addEventListener('click', closeDrawer);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && drawer.classList.contains('open')) closeDrawer(); });
     window.addEventListener('resize', () => { if (window.innerWidth >= 900) closeDrawer(); });
@@ -207,7 +201,7 @@
   }
 
   function switchTab(tab) {
-    document.querySelectorAll('.side-link, .tab-btn, [data-drawer-tab]').forEach((b) => {
+    document.querySelectorAll('.side-link, .tab-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.tab === tab);
     });
     ['dashboard', 'orders', 'bookings', 'menu', 'settings', 'analytics', 'share'].forEach((t) => {
@@ -1233,9 +1227,6 @@
               '<label for="st-delivery">' + esc(I.t('deliveryL')) + '</label></div></div>' +
             '<div class="field"><label>&nbsp;</label><div class="checkbox-line"><input id="st-ignore-hours" type="checkbox"' + (s.ignoreOpeningHours ? ' checked' : '') + '>' +
               '<label for="st-ignore-hours">' + esc(I.t('ignoreHours')) + '</label></div></div>' +
-            '<div class="field"><label>&nbsp;</label><div class="checkbox-line"><input id="st-free-ship" type="checkbox"' + (s.freeDeliveryEnabled ? ' checked' : '') + '>' +
-              '<label for="st-free-ship">' + esc(I.t('freeShipL')) + '</label></div></div>' +
-            '<div class="field"><label for="st-free-threshold">' + esc(I.t('freeShipThresholdL')) + '</label><input id="st-free-threshold" type="number" min="0" step="0.01" value="' + ((s.freeDeliveryThresholdCents || 0) / 100).toFixed(2) + '"></div>' +
           '</div>' +
         '</section>' +
 
@@ -1287,14 +1278,8 @@
 
         '<section class="card"><h2>' + esc(I.t('heroImages')) + '</h2>' +
           '<div id="hero-list" class="muted small">Loading…</div>' +
-          '<div class="hero-add">' +
-            '<button id="hero-upload-btn" type="button" class="hero-add-btn">' +
-              '<span class="hero-add-plus" aria-hidden="true">+</span>' +
-              '<span>' + esc(I.t('uploadHeroImage')) + '</span>' +
-            '</button>' +
-            '<input id="hero-file" type="file" accept="image/jpeg,image/png,image/webp" hidden>' +
-            '<p class="hint muted small">' + esc(I.t('heroFormatsHint')) + '</p>' +
-          '</div>' +
+          '<input id="hero-file" type="file" accept="image/jpeg,image/png,image/webp">' +
+          '<button id="hero-upload-btn" type="button" class="btn btn-outline btn-sm mt-1">' + esc(I.t('uploadHeroImage')) + '</button>' +
         '</section>' +
 
         '<section class="card"><h2>' + esc(I.t('hoursS')) + '</h2>' +
@@ -1317,11 +1302,6 @@
       loadPushCard();
       loadHeroList();
       document.getElementById('hero-upload-btn').addEventListener('click', uploadHero);
-      // Clicking anywhere in the add zone opens the picker (no raw input shown).
-      document.querySelector('.hero-add').addEventListener('click', (e) => {
-        if (e.target.closest('#hero-upload-btn')) return;
-        document.getElementById('hero-file').click();
-      });
 
       const c1 = document.getElementById('st-color1');
       const c2 = document.getElementById('st-color2');
@@ -1388,7 +1368,6 @@
 
   async function saveSettings() {
     const feeVal = parseFloat(document.getElementById('st-fee').value);
-    const thresholdVal = parseFloat(document.getElementById('st-free-threshold').value);
     const settingsBody = {
       description: document.getElementById('st-desc').value,
       nameEn: document.getElementById('st-name-en').value.trim(),
@@ -1401,8 +1380,6 @@
       secondaryColor: document.getElementById('st-color2').value,
       ignoreOpeningHours: document.getElementById('st-ignore-hours').checked,
       deliveryEnabled: document.getElementById('st-delivery').checked,
-      freeDeliveryEnabled: document.getElementById('st-free-ship').checked,
-      ...(Number.isFinite(thresholdVal) ? { freeDeliveryThresholdCents: Math.max(0, Math.round(thresholdVal * 100)) } : {}),
       ...(Number.isFinite(feeVal) ? { deliveryFeeCents: Math.max(0, Math.round(feeVal * 100)) } : {}),
     };
 
@@ -1452,11 +1429,11 @@
       const { heroImages } = await api.get('/api/admin/hero-images');
       if (!heroImages.length) { zone.textContent = esc(I.t('noHeroImages')); return; }
       zone.innerHTML = heroImages.map((h) =>
-        '<div class="flex-between mb-1 hero-row" style="align-items:center" data-hero-id="' + esc(h.id) + '">' +
-        '<img src="' + esc(h.image_path) + '" alt="" width="88" height="56" style="object-fit:cover;border-radius:10px">' +
-        '<span class="small">' + (h.is_primary ? '<b class="hero-primary">' + esc(I.t('heroPrimary')) + '</b>' : '') + '</span>' +
-        (h.is_primary ? '' : '<button type="button" class="btn btn-outline btn-sm" data-hero-primary>' + esc(I.t('heroMakePrimary')) + '</button>') +
-        '<button type="button" class="btn btn-outline btn-sm" data-hero-remove>' + esc(I.t('heroRemove')) + '</button></div>'
+        '<div class="flex-between mb-1" style="align-items:center" data-hero-id="' + esc(h.id) + '">' +
+        '<img src="' + esc(h.image_path) + '" alt="" width="72" height="40" style="object-fit:cover;border-radius:8px">' +
+        '<span class="small">' + (h.is_primary ? '★ primary' : '') + ' #' + h.position + '</span>' +
+        (h.is_primary ? '' : '<button type="button" class="btn btn-outline btn-sm" data-hero-primary>Primary</button>') +
+        '<button type="button" class="btn btn-outline btn-sm" data-hero-remove>Remove</button></div>'
       ).join('');
       zone.querySelectorAll('[data-hero-primary]').forEach((b) => b.addEventListener('click', async () => {
         const id = b.closest('[data-hero-id]').dataset.heroId;
