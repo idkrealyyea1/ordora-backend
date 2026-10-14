@@ -30,6 +30,27 @@ if (appUrl && !/^https?:\/\//i.test(appUrl)) {
   throw new Error('APP_URL must start with http:// or https://');
 }
 
+// Optional split frontend (Cloudflare Pages → Render API). Unset = same
+// origin (Wasmer / Render full-stack): no CORS headers, no behavior change.
+let frontendUrl = (process.env.FRONTEND_URL || '').trim().replace(/\/+$/, '');
+if (frontendUrl && !/^https?:\/\//i.test(frontendUrl)) {
+  throw new Error('FRONTEND_URL must start with http:// or https://');
+}
+let frontendHost = '';
+try {
+  frontendHost = frontendUrl ? new URL(frontendUrl).host : '';
+} catch {
+  frontendHost = '';
+}
+
+// Session cookie SameSite. 'lax' (default) for same-origin hosting;
+// 'none' when the browser frontend lives on another origin (Pages →
+// Render), so cross-site fetch/EventSource keep the session.
+let cookieSameSite = (process.env.COOKIE_SAMESITE || 'lax').toLowerCase();
+if (cookieSameSite !== 'lax' && cookieSameSite !== 'none') {
+  throw new Error('COOKIE_SAMESITE must be "lax" or "none".');
+}
+
 let sessionSecret = process.env.SESSION_SECRET || '';
 if (isProd && (!sessionSecret || sessionSecret.length < 32)) {
   throw new Error('SESSION_SECRET must be set to at least 32 random characters in production.');
@@ -50,7 +71,13 @@ const maxUploadMb = Math.min(intEnv('MAX_UPLOAD_MB', 2), 5);
 //     declares `capabilities.database.engine: postgres`.
 function resolveDbConfig() {
   if (process.env.DATABASE_URL) {
-    return { connectionString: process.env.DATABASE_URL };
+    const url = process.env.DATABASE_URL;
+    // Managed Postgres (Supabase / Neon / Render) mandates TLS; a local dev
+    // database does not. Wasmer's DB_* path below is untouched.
+    const local = /@(localhost|127\.0\.0\.1|::1)([:/]|$)/.test(url) || /[?&]sslmode=disable/.test(url);
+    return local
+      ? { connectionString: url }
+      : { connectionString: url, ssl: { rejectUnauthorized: false } };
   }
   if (process.env.DB_HOST && process.env.DB_NAME) {
     // Wasmer managed Postgres: TLS is mandatory and the certificate comes
@@ -91,6 +118,9 @@ const config = Object.freeze({
   isTest,
   port: intEnv('PORT', 3000),
   appUrl,
+  frontendUrl,
+  frontendHost,
+  cookieSameSite,
   trustProxy,
 
   dbConfig,

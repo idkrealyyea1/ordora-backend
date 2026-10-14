@@ -36,6 +36,6 @@ annotations:
       name: database
     npm_version: '11'
   anybuild.run/provider: node
-  anybuild.run/version: 0.32.0
+  anybuild.run/version: 0.33.0
   wasmer.io/version: 7.5.0
 enableDatabase: true

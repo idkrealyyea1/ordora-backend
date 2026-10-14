@@ -4,6 +4,48 @@
    Loaded as a plain <script> (CSP forbids inline scripts). */
 
 (function () {
+  /* Split-frontend backend base (Supabase + Render API + Cloudflare Pages).
+     Set `<meta name="api-base" content="https://YOUR-API.onrender.com">` or
+     `window.__API_BASE__` on the split frontend. Empty = same origin, so
+     Wasmer and Render full-stack deployments are unaffected. */
+  if (!window.__backendPatched) {
+    window.__backendPatched = true;
+    let base = '';
+    try {
+      const meta = document.querySelector('meta[name="api-base"]');
+      base = String(window.__API_BASE__ || (meta && meta.content) || '').replace(/\/+$/, '');
+    } catch (_) { base = ''; }
+    window.__API_BASE__ = base;
+    if (base) {
+      const rawFetch = window.fetch.bind(window);
+      window.fetch = function (input, init) {
+        if (typeof input === 'string' && (input.slice(0, 5) === '/api/' || input.slice(0, 9) === '/uploads/')) {
+          input = base + input;
+        }
+        return rawFetch(input, init);
+      };
+      // Uploaded images are served by the API, but <img> never goes through
+      // fetch — point /uploads/* at the backend too. Same-origin skips this.
+      const prefixImgs = function (root) {
+        if (!root.querySelectorAll) return;
+        Array.prototype.forEach.call(root.querySelectorAll('img[src^="/uploads/"]'), function (img) {
+          img.src = base + img.getAttribute('src');
+        });
+      };
+      prefixImgs(document);
+      new MutationObserver(function (muts) {
+        muts.forEach(function (m) {
+          m.addedNodes.forEach(function (n) {
+            if (!n || n.nodeType !== 1) return;
+            if (n.tagName === 'IMG' && n.getAttribute('src') && n.getAttribute('src').slice(0, 9) === '/uploads/') {
+              n.src = base + n.getAttribute('src');
+            } else prefixImgs(n);
+          });
+        });
+      }).observe(document.documentElement, { childList: true, subtree: true });
+    }
+  }
+
   const API = {
     async request(path, options) {
       const opts = Object.assign({ method: 'GET', headers: {} }, options || {});
@@ -11,7 +53,7 @@
         opts.headers['Content-Type'] = 'application/json';
         opts.body = JSON.stringify(opts.body);
       }
-      const res = await fetch(path, Object.assign({ credentials: 'same-origin' }, opts));
+      const res = await fetch(path, Object.assign({ credentials: 'include' }, opts));
       let data = null;
       try {
         data = await res.json();
@@ -36,6 +78,7 @@
     uploadWithProgress(path, formData, onProgress) {
       return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
+        if (window.__API_BASE__ && path.charAt(0) === '/') path = window.__API_BASE__ + path;
         xhr.open('POST', path);
         xhr.withCredentials = true;
         if (onProgress) {

@@ -10,7 +10,7 @@
   var App = window.App || {};
   var api = App.api || {
     get: function (path) {
-      return fetch(path, { credentials: 'same-origin' }).then(function (res) {
+      return fetch(path, { credentials: 'include' }).then(function (res) {
         return res.json().then(function (data) {
           if (!res.ok) throw new Error((data && data.error && data.error.message) || 'Request failed');
           return data;
@@ -20,7 +20,7 @@
     post: function (path, body) {
       return fetch(path, {
         method: 'POST',
-        credentials: 'same-origin',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       }).then(function (res) {

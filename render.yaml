@@ -1,0 +1,29 @@
+# Render Blueprint — full-stack deploy (API + static client, same origin).
+# Database lives on Supabase (set DATABASE_URL from the Supabase dashboard).
+# app.yaml (Wasmer Edge) is intentionally untouched: both stacks deploy from
+# this repo independently. Step-by-step guide: DEPLOY_SUPABASE_RENDER_PAGES.md
+services:
+  - type: web
+    name: restaurants-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: node server.js
+    preDeployCommand: npm run migrate
+    healthCheckPath: /api/healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: 1
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: APP_URL
+        sync: false
+      # Only needed for the optional Cloudflare Pages split frontend:
+      - key: FRONTEND_URL
+        sync: false
+      - key: COOKIE_SAMESITE
+        sync: false

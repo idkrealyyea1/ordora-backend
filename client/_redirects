@@ -1,0 +1,10 @@
+# Cloudflare Pages rewrites (same-site, 200 = serve without redirect).
+# Lets extensionless app routes resolve to their HTML files on the static
+# split frontend. Render and Wasmer ignore this file (Express routing).
+/restaurant/*  /restaurant.html  200
+/track  /track.html  200
+/app  /app/index.html  200
+/app/*  /app/index.html  200
+/offer/*  /offer.html  200
+/resources  /resources/index.html  200
+/resources/*  /resources/index.html  200

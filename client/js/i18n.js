@@ -8,6 +8,46 @@
 */
 
 (function () {
+  /* Split-frontend backend base — same installer as client/js/api.js (this
+     file loads first on most pages; the guard keeps it single-install). */
+  if (!window.__backendPatched) {
+    window.__backendPatched = true;
+    let base = '';
+    try {
+      const meta = document.querySelector('meta[name="api-base"]');
+      base = String(window.__API_BASE__ || (meta && meta.content) || '').replace(/\/+$/, '');
+    } catch (_) { base = ''; }
+    window.__API_BASE__ = base;
+    if (base) {
+      const rawFetch = window.fetch.bind(window);
+      window.fetch = function (input, init) {
+        if (typeof input === 'string' && (input.slice(0, 5) === '/api/' || input.slice(0, 9) === '/uploads/')) {
+          input = base + input;
+        }
+        return rawFetch(input, init);
+      };
+      // Uploaded images are served by the API, but <img> never goes through
+      // fetch — point /uploads/* at the backend too. Same-origin skips this.
+      const prefixImgs = function (root) {
+        if (!root.querySelectorAll) return;
+        Array.prototype.forEach.call(root.querySelectorAll('img[src^="/uploads/"]'), function (img) {
+          img.src = base + img.getAttribute('src');
+        });
+      };
+      prefixImgs(document);
+      new MutationObserver(function (muts) {
+        muts.forEach(function (m) {
+          m.addedNodes.forEach(function (n) {
+            if (!n || n.nodeType !== 1) return;
+            if (n.tagName === 'IMG' && n.getAttribute('src') && n.getAttribute('src').slice(0, 9) === '/uploads/') {
+              n.src = base + n.getAttribute('src');
+            } else prefixImgs(n);
+          });
+        });
+      }).observe(document.documentElement, { childList: true, subtree: true });
+    }
+  }
+
   const DICT = {
     ar: {
       brand: 'Restivo',
@@ -338,6 +378,12 @@
       sub_active_open: 'اشتراكك ({plan}) نشط.',
       sub_grace: 'انتهت مدتك — لديك {n} أيام للتجديد قبل إيقاف الطلبات.',
       sub_expired_renew: 'انتهت الفترة. جدّد خطتك لمواصلة إدارة متجرك.',
+      sub_lockTitle: 'انتهت فترتك التجريبية',
+      sub_lockDesc: 'لوحة التحكم مقفلة — لا يمكنك عرض البيانات أو إجراء أي تغيير.',
+      sub_lockStore: 'صفحة مطعمك ما زالت ظاهرة للزبائن.',
+      sub_lockData: 'نحتفظ بجميع بياناتك حتى {date}. جدّد قبل هذا التاريخ.',
+      sub_lockPrice: 'إعادة التفعيل: {price} شهريًا.',
+      sub_lockWa: 'إعادة التفعيل عبر واتساب',
       sub_cancelled: 'تم إلغاء الاشتراك. تواصل مع الإدارة لإعادة التفعيل.',
       sub_suspended: 'الحساب موقوف مؤقتًا. تواصل مع الإدارة.',
       /* platform subscription management */
@@ -1032,6 +1078,12 @@
       sub_active_open: 'Your subscription ({plan}) is active.',
       sub_grace: 'Your period ended — you have {n} days to renew before ordering stops.',
       sub_expired_renew: 'Your period has ended. Renew your plan to continue managing your store.',
+      sub_lockTitle: 'Your free trial has ended',
+      sub_lockDesc: 'The dashboard is locked — you cannot view data or make any changes.',
+      sub_lockStore: 'Your storefront is still visible to customers.',
+      sub_lockData: 'We keep all your data until {date}. Renew before then.',
+      sub_lockPrice: 'Reactivation: {price} per month.',
+      sub_lockWa: 'Reactivate on WhatsApp',
       sub_cancelled: 'The subscription was cancelled. Contact management to reactivate.',
       sub_suspended: 'The account is temporarily suspended. Contact management.',
       /* platform subscription management */
@@ -1437,6 +1489,7 @@
     try {
       fetch('/api/auth/language', {
         method: 'PUT',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ locale: lang }),
       }).catch(() => {});
@@ -1474,7 +1527,7 @@
     get lang() { return lang; },
     async fetchTranslations(nextLang) {
       try {
-        const res = await fetch('/api/translations?locale=' + encodeURIComponent(nextLang));
+        const res = await fetch('/api/translations?locale=' + encodeURIComponent(nextLang), { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           if (data.translations) {
@@ -1495,7 +1548,7 @@
   injectToggle();
   apply();
   window.I18N.fetchTranslations(lang).then(() => apply());
-  fetch('/api/auth/me').then((r) => r.ok ? r.json() : null).then((d) => {
+  fetch('/api/auth/me', { credentials: 'include' }).then((r) => r.ok ? r.json() : null).then((d) => {
     const srv = d && d.user && d.user.platformLanguage;
     if (srv && srv !== lang) setLang(srv);
   }).catch(() => {});

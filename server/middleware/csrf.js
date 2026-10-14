@@ -31,6 +31,9 @@ function originGuard(req, res, next) {
     const h = hostOf(config.appUrl);
     if (h) allowedHosts.add(h);
   }
+  // Optional split frontend (Cloudflare Pages → Render API). Unset by
+  // default, so same-origin deployments (Wasmer) behave exactly as before.
+  if (config.frontendHost) allowedHosts.add(config.frontendHost);
 
   if (allowedHosts.has(hostOf(origin))) return next();
   next(forbidden('BAD_ORIGIN', 'Cross-origin request rejected'));

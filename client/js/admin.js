@@ -36,6 +36,13 @@
         return;
       }
       me = meData.user;
+      try {
+        const sub = await api.get('/api/onboarding/subscription');
+        if (sub && sub.active === false) {
+          await renderExpiredLock(sub);
+          return;
+        }
+      } catch (_) { /* status check is best-effort; the server still blocks expired mutations */ }
       if (me.role === 'staff' && !new URLSearchParams(location.search).get('restaurantId')) {
         location.href = '/owner.html';
         return;
@@ -111,6 +118,41 @@
       cloud_kitchen: 'bt_cloud', small_food_business: 'bt_other',
     };
     return map[t] ? I.t(map[t]) : t;
+  }
+
+  /* Expired trial/subscription: full dashboard lock. The storefront stays
+     visible (the server still renders the menu), ordering stays blocked
+     server-side, and data is retained through graceUntil. Nothing else
+     boots: no data fetches, no live-event stream. */
+  async function renderExpiredLock(sub) {
+    document.title = I.t('sub_lockTitle');
+    let price = '$8.99';
+    try {
+      const p = await api.get('/api/pricing');
+      const pr = p.pricing || p;
+      if (pr && pr.pricing_cents != null) {
+        const cur = pr.pricing_currency || 'USD';
+        try {
+          price = new Intl.NumberFormat(undefined, { style: 'currency', currency: cur }).format(pr.pricing_cents / 100);
+        } catch (_) { price = '$' + (pr.pricing_cents / 100).toFixed(2); }
+      }
+    } catch (_) { /* fallback price stands */ }
+    const kept = sub.graceUntil ? String(sub.graceUntil).slice(0, 10) : '—';
+    const wa = 'https://wa.me/972567439846?text=' + encodeURIComponent('Reactivate ' + me.username + ' (' + price + '/month)');
+    document.querySelector('.dash-layout').innerHTML =
+      '<main class="dash-main"><div class="container mt-2"><section class="card">' +
+      '<h1>' + esc(I.t('sub_lockTitle')) + '</h1>' +
+      '<p>' + esc(I.t('sub_lockDesc')) + '</p>' +
+      '<p class="muted small">' + esc(I.t('sub_lockStore')) + '</p>' +
+      '<p><strong>' + esc(I.t('sub_lockPrice', { price })) + '</strong><br>' +
+      '<span class="muted small">' + esc(I.t('sub_lockData', { date: kept })) + '</span></p>' +
+      '<p class="mt-2"><a class="btn" href="' + esc(wa) + '" target="_blank" rel="noopener">' + esc(I.t('sub_lockWa')) + '</a> ' +
+      '<button id="lock-logout" type="button" class="btn btn-outline">' + esc(I.t('logout')) + '</button></p>' +
+      '</section></div></main>';
+    document.getElementById('lock-logout').addEventListener('click', async () => {
+      await api.post('/api/auth/logout').catch(() => {});
+      location.href = '/login.html';
+    });
   }
 
   async function reloadInfo() {
@@ -673,7 +715,7 @@
 
   function connectEvents() {
     if (eventSource) eventSource.close();
-    eventSource = new EventSource('/api/admin/events');
+    eventSource = new EventSource((window.__API_BASE__ || '') + '/api/admin/events', { withCredentials: true });
 
     eventSource.addEventListener('order:new', (e) => {
       try {

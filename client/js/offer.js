@@ -6,7 +6,7 @@
     const zone=document.getElementById('offer-zone');
     if(!zone) return;
     try{
-      const res=await fetch('/api/offer/'+encodeURIComponent(code),{credentials:'same-origin'});
+      const res=await fetch('/api/offer/'+encodeURIComponent(code),{credentials:'include'});
       if(!res.ok) throw new Error('العرض غير موجود');
       const data=await res.json();
       const offer=data.offer||{};

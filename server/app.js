@@ -55,13 +55,40 @@ function buildApp() {
         },
       },
       hsts: config.isProd ? { maxAge: 15552000, includeSubDomains: true } : false,
-      crossOriginResourcePolicy: { policy: 'same-origin' },
+      crossOriginResourcePolicy: { policy: config.frontendUrl ? 'cross-origin' : 'same-origin' },
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     })
   );
 
   /* --------------------------- body parsing ---------------------------- */
   app.use(express.json({ limit: '64kb' }));
+
+  /* ----------------- split-frontend CORS (optional) -------------------- */
+  // Active only when FRONTEND_URL is set (Cloudflare Pages → Render API).
+  // Unset (Wasmer / same-origin): no CORS headers, behavior unchanged.
+  if (config.frontendUrl) {
+    app.use((req, res, next) => {
+      const origin = req.headers.origin;
+      let host = '';
+      try {
+        host = origin ? new URL(origin).host : '';
+      } catch {
+        host = '';
+      }
+      if (origin && host === config.frontendHost) {
+        res.set('Access-Control-Allow-Origin', origin);
+        res.set('Access-Control-Allow-Credentials', 'true');
+        res.set('Vary', 'Origin');
+      }
+      if (req.method === 'OPTIONS') {
+        res.set('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type');
+        res.set('Access-Control-Max-Age', '86400');
+        return res.status(204).end();
+      }
+      next();
+    });
+  }
 
   /* ------------------------------ CSRF -------------------------------- */
   app.use(originGuard);
@@ -108,8 +135,9 @@ function buildApp() {
       proxy: config.trustProxy >= 1,
       cookie: {
         httpOnly: true,
-        sameSite: 'lax',
-        secure: config.isProd,
+        sameSite: config.cookieSameSite,
+        // SameSite=None is rejected by browsers without Secure.
+        secure: config.cookieSameSite === 'none' ? true : config.isProd,
         maxAge: config.sessionTtlMs,
         path: '/',
       },

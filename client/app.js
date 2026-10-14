@@ -1,6 +1,6 @@
 const copy = {
   ar: {
-    nav: { how: "كيف يعمل", features: "المزايا", pricing: "الاشتراك", faq: "أسئلة شائعة", audience: "حلّ للمطاعم المستقلة", menu: "فتح القائمة", close: "إغلاق" },
+    nav: { how: "كيف يعمل", features: "المزايا", pricing: "الاشتراك", faq: "أسئلة شائعة", audience: "حلّ للمطاعم المستقلة", menu: "فتح القائمة", close: "إغلاق", startFree: "ابدأ مجانًا" },
     hero: { titleA: "منيو رقمي.", titleB: "وطلب أسهل.", description: "اعرض أطباقك وأسعارها في منيو يفتحه ضيوفك عبر رابط أو QR، ويتيح لهم إرسال طلباتهم بسهولة — بلا تطبيق أو عمولة.", request: "تعرّف على Ordora", demo: "جرّب المنيو التجريبي مجانًا" },
     ticker: ["بدون عمولة على الطلبات", "لا يحتاج الضيف إلى تطبيق", "منيو بهوية مطعمك", "اشتراك شهري واضح"],
     story: { eyebrow: "من مطبخك إلى شاشة ضيفك", titleA: "منيو يحمل هويتك.", titleB: "وطلب أسهل لضيفك.", body: "اعرض أطباقك بصورها وأسعارها بوضوح، ليختار الضيف ما يحب ويراجع طلبه قبل إرساله. تجمع الصفحة المنيو والطلب في تجربة واحدة.", tag: "أطباقك، كما تحب أن يراها ضيوفك.", owner: "منيو رقمي على جهاز لوحي", note: "مصمم لصاحب المطعم وفريق الخدمة." },
@@ -25,7 +25,7 @@ const copy = {
     phone: { name: "ذا ريد بن", status: "مفتوح الآن", description: "برغر طازج على الفحم، وصوصاتنا الخاصة", location: "يافا، فلسطين", search: "ابحث عن طبقك المفضل", categories: ["الكل", "برغر", "جانبيات", "مشروبات"], featured: "الأكثر طلبًا", burger: "ريد بن الأصلي", burgerDesc: "جبنة شيدر، خس، طماطم وصوصنا الخاص", second: "سموكي هاوس", secondDesc: "برغر مدخن مع جبنة ذائبة", cart: "عرض السلة", count: "2 أصناف", button: "افتح المنيو الكامل" }
   },
   en: {
-    nav: { how: "How it works", features: "Features", pricing: "Pricing", faq: "FAQ", audience: "For independent restaurants", menu: "Open menu", close: "Close" },
+    nav: { how: "How it works", features: "Features", pricing: "Pricing", faq: "FAQ", audience: "For independent restaurants", menu: "Open menu", close: "Close", startFree: "Start for free" },
     hero: { titleA: "Digital menu.", titleB: "Simpler orders.", description: "Show your dishes and prices in one menu guests can open by link or QR, then send an order—no app download or commission.", request: "Talk to the Ordora team", demo: "Try the sample menu free" },
     ticker: ["No commission on orders", "No app for guests", "A menu in your brand", "One clear monthly price"],
     story: { eyebrow: "From your kitchen to their screen", titleA: "A menu in your brand.", titleB: "An easier order for guests.", body: "Show every dish with clear photos and prices. Guests can choose what they want and review the order before sending. Your menu and online ordering live in one simple page.", tag: "Your dishes, shown the way you want.", owner: "A digital menu on a tablet", note: "Made for owners and the people serving guests." },
@@ -165,16 +165,16 @@ function render() {
   app.innerHTML = `<div id="top" class="site-shell">
     <header class="site-header"><div class="container header-inner">${logo()}
       <nav class="desktop-nav"><a href="#how-it-works">${t.nav.how}</a><a href="#features">${t.nav.features}</a><a href="#pricing">${t.nav.pricing}</a><a href="#faq">${t.nav.faq}</a></nav>
-      <div class="header-actions">${langToggle()}</div>
+      <div class="header-actions"><a class="button button-dark" href="/signup.html">${t.nav.startFree}</a>${langToggle()}</div>
       <div class="mobile-actions">${langToggle()}<button class="menu-button" type="button" data-action="mobile-menu" aria-expanded="${mobileOpen}" aria-label="${mobileOpen ? t.nav.close : t.nav.menu}">${icon(mobileOpen ? "close" : "menu", 21)}</button></div>
-    </div>${mobileOpen ? `<div class="mobile-menu"><nav><a href="#how-it-works">${t.nav.how}</a><a href="#features">${t.nav.features}</a><a href="#pricing">${t.nav.pricing}</a><a href="#faq">${t.nav.faq}</a><a class="mobile-demo" href="${demoUrl}">${t.hero.demo}</a><button type="button" data-action="request">${t.hero.request}</button></nav></div>` : ""}</header>
+    </div>${mobileOpen ? `<div class="mobile-menu"><nav><a href="#how-it-works">${t.nav.how}</a><a href="#features">${t.nav.features}</a><a href="#pricing">${t.nav.pricing}</a><a href="#faq">${t.nav.faq}</a><a class="mobile-demo" href="/signup.html">${t.nav.startFree}</a><a class="mobile-demo" href="${demoUrl}">${t.hero.demo}</a><button type="button" data-action="request">${t.hero.request}</button></nav></div>` : ""}</header>
     <main>
       <section class="hero"><div class="page-grid"></div><div class="hero-glow glow-one"></div><div class="hero-glow glow-two"></div>
         <div class="container hero-content">
           <div class="hero-grid"><div class="hero-copy">
             <h1>${t.hero.titleA}<span>${t.hero.titleB}<svg viewBox="0 0 330 13" aria-hidden="true"><path d="M2 9.5C82 2 236 1.5 328 7"/></svg></span></h1>
             <p class="hero-description">${t.hero.description}</p>
-            <div class="hero-ctas"><a class="button hero-start" href="${demoUrl}">${t.hero.demo}${icon("arrow", 17)}</a></div>
+            <div class="hero-ctas"><a class="button hero-start" href="/signup.html">${t.nav.startFree}${icon("arrow", 17)}</a><a class="button button-dark" href="${demoUrl}">${t.hero.demo}</a></div>
           </div><div class="hero-preview">${phonePreview(t)}</div></div>
         </div>
       </section>

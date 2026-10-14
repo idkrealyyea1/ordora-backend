@@ -15,7 +15,7 @@
   const priceEl=document.getElementById('mk-price');
   const pricePeriodEl=document.getElementById('mk-price-period');
   if(priceEl){
-    fetch('/api/pricing', {credentials:'same-origin'}).then(r=>r.json()).then(d=>{
+    fetch('/api/pricing', {credentials:'include'}).then(r=>r.json()).then(d=>{
       const p=d.pricing||d;
       if(p && p.pricing_cents!=null){
         const major=(p.pricing_cents/100).toFixed(2).replace(/\.00$/,'');
