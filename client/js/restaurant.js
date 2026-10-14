@@ -1,1027 +1,1127 @@
 'use strict';
 
 /**
- * Real storefront in the Restivo design language (same look as the landing
- * live-demo, backed by live API data). SERVER computes all totals.
+ * Live storefront in the Ordora menu design language (same markup, IDs and
+ * CSS as the /demo/ preview, backed by live API data). SERVER computes all
+ * totals at checkout; option prices shown here are display estimates.
  */
 
 (function () {
-  const { api, esc, fmtMoney, qsParam, toast, theme } = window.App;
-  const FOOD = '/images/restivo-food-table.jpg';
+  var App = window.App || {};
+  var api = App.api || {
+    get: function (path) {
+      return fetch(path, { credentials: 'same-origin' }).then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error((data && data.error && data.error.message) || 'Request failed');
+          return data;
+        });
+      });
+    },
+    post: function (path, body) {
+      return fetch(path, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error((data && data.error && data.error.message) || 'Request failed');
+          return data;
+        });
+      });
+    },
+  };
+  var esc = App.esc || function (value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  };
 
   /* ------------------------- resolve slug -------------------------- */
-  let slug = qsParam('r');
-  if (!slug && location.pathname.startsWith('/restaurant/')) {
+  var slug = '';
+  try {
+    var m = new URLSearchParams(location.search).get('r');
+    if (m) slug = m;
+  } catch (_) { /* ignore */ }
+  if (!slug && location.pathname.indexOf('/restaurant/') === 0) {
     slug = decodeURIComponent(location.pathname.split('/')[2] || '');
   }
   slug = (slug || '').toLowerCase();
 
-  /* --------------------------- language ---------------------------- */
-  const T = {
+  /* ------------------------------ copy ----------------------------- */
+  /* UI chrome is byte-identical to the /demo/ preview; `live*` keys are the
+     only additions (checkout needs customer fields the preview never had). */
+  var copy = {
     ar: {
-      open: 'مفتوح الآن', closed: 'مغلق حاليًا', share: 'شارك القائمة', book: 'احجز طاولة',
-      menuEye: 'قائمتنا', menuTitle: 'تصفّح أطباقنا واختر ما تشتهي',
-      search: 'ابحث عن طبقك المفضل...', all: 'كل القائمة', popular: 'الأكثر طلبًا',
-      featured: 'أطباق نوصي بها', full: 'القائمة كاملة', add: 'أضف للطلب',
-      cart: 'طلبك', items: 'أصناف', total: 'الإجمالي', subtotal: 'المجموع الفرعي',
-      deliveryFee: 'رسوم التوصيل', pickup: 'استلام', delivery: 'توصيل',
-      deliveryBy: 'التوصيل بواسطة', sendWA: 'أكمل طلبك عبر واتساب', sendSite: 'تأكيد الطلب',
-      ready: 'طلبك جاهز للإرسال', sentHint: 'يفتح واتساب لتختار جهة الاتصال وترسل طلبك.',
-      yourName: 'الاسم', waNumber: 'رقم الواتساب', phoneOpt: 'رقم الهاتف (اختياري)',
-      addrDelivery: 'عنوان التوصيل', addrOpt: 'العنوان (اختياري)', notesOpt: 'ملاحظات (اختياري)',
-      keepBrowsing: 'مواصلة التصفح', cartEmpty: 'سلتك فارغة', cartEmptyHint: 'تصفح القائمة وأضف ما يعجبك.',
-      placedHead: 'تم استلام طلبك', showCode: 'أظهر هذا الرمز عند الاستلام أو تتبع طلبك به:',
-      trackMyOrder: 'تتبع طلبي', done: 'حسنًا', linkCopied: 'تم نسخ رابط المنيو',
-      reorderAdjusted: 'بعض الأصناف تغيّرت أو لم تعد متوفرة — راجع سلتك قبل التأكيد.',
-      orderSummary: 'ملخص الطلب',
-      nextSteps: 'احتفظ بهذا الرمز. سنبدأ بتجهيز طلبك فورًا ويمكنك تتبع حالته في أي وقت.',
-      enterNameAndWa: 'الرجاء إدخال الاسم ورقم الواتساب', addrRequired: 'الرجاء إدخال عنوان التوصيل',
-      noWA: 'الواتساب غير متوفر لهذا المطعم', closedNotice: 'المطعم مغلق حاليًا — يمكنك التصفح وإتمام الطلب عند الافتتاح.',
-      subStoreExpired: 'الطلبات متوقفة مؤقتًا — يمكنك تصفح القائمة.',
-      subStoreSuspended: 'المتجر غير متاح حاليًا — يمكنك تصفح القائمة.',
-      noMatch: 'لا توجد أصناف مطابقة.', menuEmpty: 'لا توجد أصناف متاحة حاليًا.',
-      soldOut: 'نفد', top: '★ مميز', bookTitle: 'احجز طاولة', bookDesc: 'أخبرنا بتفاصيل زيارتك وسنؤكد حجزك.',
-      bkName: 'الاسم', bkWA: 'واتساب', bkPhone: 'هاتف (اختياري)', bkTables: 'عدد الطاولات',
-      bkDate: 'التاريخ', bkTime: 'الوقت', bkNotes: 'ملاحظات', bookNow: 'تأكيد الحجز',
-      bookingCreated: 'تم إرسال طلب الحجز', close: 'إغلاق', currencies: 'ر.س',
-      optRequired: 'مطلوب', optNeedMore: 'أكمل الاختيارات المطلوبة قبل الإضافة',
-      preorderBadge: 'طلب مسبق',
+      previewLabel: 'قائمة تجريبية',
+      tableLabel: 'الطاولة 08',
+      share: 'مشاركة',
+      brandNote: 'برغر مشوي. ناس طيبين.',
+      order: 'طلبك',
+      openNow: 'مفتوح الآن',
+      closed: 'مغلق حاليًا',
+      restaurantDescription: 'برغر طازج على الفحم، صوصاتنا الخاصة، وجمعة ما بتنمل.',
+      ratingLabel: 'من 280 تقييم',
+      deliveryTime: '20–30 دقيقة',
+      location: 'يافا، فلسطين',
+      coverLabel: 'صور المطعم',
+      previousCover: 'الصورة السابقة',
+      nextCover: 'الصورة التالية',
+      showCover: 'عرض الصورة',
+      menuKicker: 'من الشواية، على طول',
+      menuTitle: 'قائمة ريد بن',
+      menuDescription: 'لحم طازج، خبز محمّص، وإضافات تخلّي كل قضمة أحلى.',
+      searchLabel: 'ابحث في القائمة',
+      searchPlaceholder: 'ابحث عن طبق تحبه',
+      categoryLabel: 'أقسام القائمة',
+      popularRibbon: 'اختيارات أحبّها ضيوفنا',
+      footerCopyright: '© 2026 Ordora. جميع الحقوق محفوظة.',
+      footerMade: 'صُنع مع Ordora',
+      viewOrder: 'عرض الطلب',
+      all: 'كل الأصناف',
+      bestSeller: 'الأكثر طلبًا',
+      noResultsTitle: 'لم نجد هذا الطبق',
+      noResultsText: 'جرّب كلمة أخرى أو اختر قسمًا مختلفًا.',
+      yourOrder: 'طلبك',
+      pickup: 'استلام',
+      delivery: 'توصيل',
+      emptyTitle: 'طلبك يبدأ من هنا',
+      emptyText: 'اختر طبقًا من القائمة وسنضيفه إلى طلبك.',
+      subtotal: 'المجموع',
+      deliveryFee: 'رسوم التوصيل',
+      free: 'مجانًا',
+      total: 'الإجمالي',
+      continueCheckout: 'متابعة الطلب',
+      close: 'إغلاق',
+      options: 'اختر الإضافات',
+      required: 'مطلوب',
+      optional: 'اختياري',
+      chooseOption: 'اختر خيارًا للمتابعة',
+      addToOrder: 'أضف إلى الطلب',
+      increase: 'زيادة الكمية',
+      decrease: 'تقليل الكمية',
+      remove: 'إزالة',
+      cartAdded: 'أُضيف الطبق إلى طلبك',
+      cartUpdated: 'تم تحديث طلبك',
+      linkCopied: 'تم نسخ رابط القائمة',
+      shareError: 'تعذّرت مشاركة الرابط من هذا المتصفح',
+      closeOrder: 'إغلاق الطلب',
+      tableService: 'للطاولة 08',
+      currencyLocale: 'ar',
+      liveName: 'الاسم',
+      liveWhatsapp: 'رقم الواتساب',
+      liveAddress: 'عنوان التوصيل',
+      liveNotes: 'ملاحظات (اختياري)',
+      livePlaceOrder: 'تأكيد الطلب',
+      liveSending: 'جارٍ إرسال طلبك…',
+      liveOrderSent: 'تم استلام طلبك',
+      liveShowCode: 'أظهر هذا الرمز عند الاستلام:',
+      liveTrack: 'تتبع طلبي',
+      liveDone: 'تمام',
+      liveEnterNameAndWa: 'الرجاء إدخال الاسم ورقم الواتساب',
+      liveAddrRequired: 'الرجاء إدخال عنوان التوصيل',
+      liveBlocked: 'الطلبات متوقفة مؤقتًا — يمكنك تصفح القائمة.',
+      liveLoadError: 'تعذّر تحميل القائمة — تحقق من اتصالك وحاول مجددًا.',
+      liveNotFound: 'المطعم غير موجود.',
     },
     en: {
-      open: 'Open now', closed: 'Currently closed', share: 'Share menu', book: 'Book a table',
-      menuEye: 'THE MENU', menuTitle: 'Explore the menu and find your favorite',
-      search: 'Search for a dish...', all: 'Full menu', popular: 'Most ordered',
-      featured: 'Guest favorites', full: 'The full menu', add: 'Add to order',
-      cart: 'Your order', items: 'items', total: 'Total', subtotal: 'Subtotal',
-      deliveryFee: 'Delivery fee', pickup: 'Pickup', delivery: 'Delivery',
-      deliveryBy: 'Delivered by', sendWA: 'Continue in WhatsApp', sendSite: 'Place order',
-      ready: 'Your order is ready to send', sentHint: 'WhatsApp will open so you can choose where to send it.',
-      yourName: 'Name', waNumber: 'WhatsApp number', phoneOpt: 'Phone (optional)',
-      addrDelivery: 'Delivery address', addrOpt: 'Address (optional)', notesOpt: 'Notes (optional)',
-      keepBrowsing: 'Keep browsing', cartEmpty: 'Your cart is empty', cartEmptyHint: 'Browse the menu and add what you like.',
-      placedHead: 'Order received', showCode: 'Show this code at pickup or use it to track your order:',
-      trackMyOrder: 'Track my order', done: 'Done', linkCopied: 'Menu link copied',
-      reorderAdjusted: 'Some items changed or are no longer available — review your cart before confirming.',
-      orderSummary: 'Order summary',
-      nextSteps: 'Keep this code. We will start preparing your order right away and you can track its status anytime.',
-      enterNameAndWa: 'Please enter your name and WhatsApp number', addrRequired: 'Please enter the delivery address',
-      noWA: 'WhatsApp is not available for this restaurant', closedNotice: 'The restaurant is currently closed — feel free to browse.',
-      subStoreExpired: 'Ordering is paused for now — feel free to browse the menu.',
-      subStoreSuspended: 'This store is currently unavailable — feel free to browse the menu.',
-      noMatch: 'No dishes match your search.', menuEmpty: 'No items available right now.',
-      soldOut: 'Sold out', top: '★ Top', bookTitle: 'Book a table', bookDesc: 'Tell us about your visit and we will confirm.',
-      bkName: 'Name', bkWA: 'WhatsApp', bkPhone: 'Phone (optional)', bkTables: 'Tables',
-      bkDate: 'Date', bkTime: 'Time', bkNotes: 'Notes', bookNow: 'Confirm booking',
-      bookingCreated: 'Booking request sent', close: 'Close', currencies: '',
-      optRequired: 'Required', optNeedMore: 'Please complete the required choices first',
-      preorderBadge: 'Pre-order',
+      previewLabel: 'Menu preview',
+      tableLabel: 'Table 08',
+      share: 'Share',
+      brandNote: 'Made for good table moments',
+      order: 'Your order',
+      openNow: 'Open now',
+      closed: 'Currently closed',
+      restaurantDescription: 'Fresh-grilled burgers, house-made sauces, and the kind of company that makes you stay awhile.',
+      ratingLabel: 'from 280 reviews',
+      deliveryTime: '20–30 min',
+      location: 'Jaffa, Palestine',
+      coverLabel: 'Restaurant cover photos',
+      previousCover: 'Previous cover photo',
+      nextCover: 'Next cover photo',
+      showCover: 'Show cover photo',
+      menuKicker: 'Straight off the grill',
+      menuTitle: 'The Red Bun menu',
+      menuDescription: 'Fresh beef, toasted buns, and the good stuff in every bite.',
+      searchLabel: 'Search the menu',
+      searchPlaceholder: 'Find something you love',
+      categoryLabel: 'Menu categories',
+      popularRibbon: 'Guest favorites',
+      footerCopyright: '© 2026 Ordora. All rights reserved.',
+      footerMade: 'Made with Ordora',
+      viewOrder: 'View order',
+      all: 'Everything',
+      bestSeller: 'Guest favorite',
+      noResultsTitle: 'No dishes found',
+      noResultsText: 'Try a different search or browse another category.',
+      yourOrder: 'Your order',
+      pickup: 'Pickup',
+      delivery: 'Delivery',
+      emptyTitle: 'Your order starts here',
+      emptyText: 'Choose a dish from the menu and it will appear here.',
+      subtotal: 'Subtotal',
+      deliveryFee: 'Delivery',
+      free: 'Free',
+      total: 'Total',
+      continueCheckout: 'Continue to checkout',
+      close: 'Close',
+      options: 'Make it yours',
+      required: 'Required',
+      optional: 'Optional',
+      chooseOption: 'Choose an option to continue',
+      addToOrder: 'Add to order',
+      increase: 'Increase quantity',
+      decrease: 'Decrease quantity',
+      remove: 'Remove',
+      cartAdded: 'Added to your order',
+      cartUpdated: 'Your order was updated',
+      linkCopied: 'Menu link copied',
+      shareError: 'This browser could not share the menu link',
+      closeOrder: 'Close order',
+      tableService: 'For table 08',
+      currencyLocale: 'en',
+      liveName: 'Name',
+      liveWhatsapp: 'WhatsApp number',
+      liveAddress: 'Delivery address',
+      liveNotes: 'Notes (optional)',
+      livePlaceOrder: 'Place order',
+      liveSending: 'Sending your order…',
+      liveOrderSent: 'Order received',
+      liveShowCode: 'Show this code at pickup:',
+      liveTrack: 'Track my order',
+      liveDone: 'Done',
+      liveEnterNameAndWa: 'Please enter your name and WhatsApp number',
+      liveAddrRequired: 'Please enter the delivery address',
+      liveBlocked: 'Ordering is paused for now — feel free to browse the menu.',
+      liveLoadError: 'Could not load the menu — check your connection and retry.',
+      liveNotFound: 'Restaurant not found.',
     },
   };
-  let lang = 'ar';
-  try { lang = localStorage.getItem('restivo-lang') || 'ar'; } catch (_) { /* ignore */ }
-  if (lang !== 'ar' && lang !== 'en') lang = 'ar';
-  const t = () => T[lang];
 
-  function setLang(next) {
-    lang = next;
-    try { localStorage.setItem('restivo-lang', lang); } catch (_) { /* ignore */ }
-    document.documentElement.lang = lang;
-    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-    renderAll();
-    if (view) document.title = (lang === 'en' && view.settings.nameEn) ? view.settings.nameEn : view.name;
-  }
-
-  /* ----------------------------- state ----------------------------- */
-  const CART_KEY = 'cart_' + slug;
-  let view = null;
-  let cart = loadCart();
-  let orderType = loadOrderType();
-  let activeCategory = 'all';
-  let searchTerm = '';
-  let cartOpen = false;
-  let sent = false;
-  let bookingOpen = false;
-  let co = { name: '', wa: '', phone: '', address: '', notes: '' };
-
-  function loadCart() {
-    try {
-      const raw = JSON.parse(localStorage.getItem(CART_KEY) || '{}');
-      const clean = {};
-      for (const [k, v] of Object.entries(raw)) {
-        if (Number.isInteger(v) && v > 0 && v <= 99) clean[k] = v;
-        else if (v && Number.isInteger(v.qty) && v.qty > 0 && v.qty <= 99 && Array.isArray(v.selections)) {
-          clean[k] = { qty: v.qty, selections: v.selections };
-        }
-      }
-      return clean;
-    } catch (_) { return {}; }
-  }
-  function saveCart() { try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch (_) {} }
-  function loadOrderType() {
-    try { return localStorage.getItem('ordertype_' + slug) || 'pickup'; } catch (_) { return 'pickup'; }
-  }
-
-  if (!slug) {
-    document.getElementById('live-content').innerHTML =
-      '<div class="live-alert error">Restaurant not found</div>';
-    return;
-  }
-
-  /* --------------------------- derived ----------------------------- */
-  const money = (cents) => fmtMoney(cents, (view && view.settings && view.settings.currency) || 'USD', lang);
-  // Pending option picks per item (card pickers only; server re-validates all).
-  const picks = {};
-  const pickMap = (itemId) => picks[itemId] || (picks[itemId] = {});
-  // Display-only unit estimate from definitions (server computes truth).
-  function estimateUnit(item, sels) {
-    let unit = item.price_cents;
-    const groups = {};
-    for (const g of (item.options || [])) groups[g.id] = g;
-    for (const sel of (sels || [])) {
-      const g = groups[sel.groupId];
-      if (!g) continue;
-      if (g.pricing === 'replace' && sel.choices.length) {
-        const c = (g.choices || []).find((x) => x.id === sel.choices[0].choiceId);
-        if (c) unit = c.price_cents;
-      } else {
-        for (const line of sel.choices) {
-          const c = (g.choices || []).find((x) => x.id === line.choiceId);
-          if (c) unit += c.price_cents * line.quantity;
-        }
-      }
-    }
-    return unit;
-  }
-  const normSels = (sels) => (sels || []).map((s) => ({
-    groupId: s.groupId,
-    choices: (s.choices || []).map((c) => ({ choiceId: c.choiceId, quantity: c.quantity })),
-  }));
-  function cartEntries() {
-    if (!view) return [];
-    return Object.entries(cart)
-      .map(([key, v]) => {
-        const legacyQty = Number.isInteger(v) ? v : 0;
-        const itemId = legacyQty ? key : key.split('#')[0];
-        const item = view.items.find((i) => i.id === itemId);
-        if (!item || !item.is_available) return null;
-        const qty = legacyQty || (v.qty || 0);
-        if (!qty) return null;
-        return { key, item, qty, selections: legacyQty ? [] : normSels(v.selections) };
-      })
-      .filter(Boolean);
-  }
-  const subtotalCents = () => cartEntries().reduce((s, e) => s + estimateUnit(e.item, e.selections) * e.qty, 0);
-  const feeCents = () => (orderType === 'delivery' ? Number((view && view.settings && view.settings.deliveryFeeCents) || 0) : 0);
-  const totalUnits = () => cartEntries().reduce((s, e) => s + e.qty, 0);
-  // D4: delivery availability is the restaurant's own setting toggle, not company linkage.
-  const hasDelivery = () => !view || !view.settings || view.settings.deliveryEnabled !== false;
-  const itemVisible = (item) => {
-    if (searchTerm && !item.name.toLowerCase().includes(searchTerm) &&
-        !(item.description || '').toLowerCase().includes(searchTerm)) return false;
-    if (activeCategory === 'all') return true;
-    if (activeCategory === 'popular') return !!item.is_popular;
-    return item.category_id === activeCategory;
+  /* ------------------------------ state ---------------------------- */
+  var state = {
+    language: 'ar',
+    category: 'all',
+    query: '',
+    fulfillment: 'pickup',
+    cart: [],
+    modalDishId: null,
+    modalSelections: {},
+    modalQuantity: 1,
+    cartOpen: false,
+    checkoutOpen: false,
+    placing: false,
+    placedOrder: null,
+    previousFocus: null,
+    toastTimer: null,
+    coverIndex: 0,
+    coverTimer: null,
+    coverPaused: false,
   };
+  var view = null;
+  var dishes = [];
+  var categories = [{ id: 'all', label: null, emoji: '🍽️' }];
+  var coverSlides = [];
+  var FALLBACK_IMG = '/demo/images/restivo-food-table.jpg';
 
-  /* ---------------------------- render ----------------------------- */
-  const $head = () => document.getElementById('live-head');
-  const $content = () => document.getElementById('live-content');
-  const $bar = () => document.getElementById('live-cart-btn');
-  const $overlay = () => document.getElementById('cart-root');
-
-  function renderAll() {
-    if (!view) return;
-    if (!hasDelivery()) orderType = 'pickup';
-    renderHead();
-    renderContent();
-    renderBar();
-    renderOverlay();
+  function currency() {
+    return (view && view.settings && view.settings.currency) || 'USD';
+  }
+  function money(cents) {
+    if (App.fmtMoney) {
+      try {
+        return App.fmtMoney(cents, currency(), state.language);
+      } catch (_) { /* fall through */ }
+    }
+    try {
+      return new Intl.NumberFormat(state.language === 'ar' ? 'ar' : 'en', {
+        style: 'currency', currency: currency(), maximumFractionDigits: 2,
+      }).format((cents || 0) / 100);
+    } catch (_) {
+      return (((cents || 0) / 100).toFixed(2) + ' ' + currency());
+    }
   }
 
-  function renderHead() {
-    const s = view.settings || {};
-    const nm = (lang === 'en' && s.nameEn) ? s.nameEn : view.name;
-    const letter = (nm || '?').trim().charAt(0);
-    const b = brand();
-    const logoStyle = b.logoBg ? ' style="background:' + esc(b.logoBg) + ';color:' + esc(b.logoFg) + '"' : '';
-    const logo = s.logoPath
-      ? '<img class="live-logo-img" src="' + esc(s.logoPath) + '" alt="">'
-      : '<span class="live-logo"' + logoStyle + '>' + esc(letter) + '</span>';
-    $head().innerHTML =
-      '<div class="live-brand">' + logo +
-      '<div><strong>' + esc(nm) + '</strong><small>' + esc(view.slug.toUpperCase()) + '</small></div></div>' +
-      '<div class="live-actions"><button class="outline-btn" id="lang-btn">' + (lang === 'ar' ? 'English' : 'العربية') + '</button></div>';
-    document.getElementById('lang-btn').addEventListener('click', () => setLang(lang === 'ar' ? 'en' : 'ar'));
+  /* ----------------------------- helpers --------------------------- */
+  function $(selector, root) { return (root || document).querySelector(selector); }
+  function $$(selector, root) { return Array.prototype.slice.call((root || document).querySelectorAll(selector)); }
+  function getCopy(key) { return copy[state.language][key] || copy.en[key] || key; }
+  function localize(value) {
+    if (typeof value === 'string') return value;
+    if (!value) return '';
+    return value[state.language] || value.en || value.ar || '';
+  }
+  function escapeHTML(value) {
+    return String(value).replace(/[&<>"']/g, function (character) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character];
+    });
+  }
+  function emojiFor(name) {
+    var s = String(name || '').toLowerCase();
+    if (/burger|برجر|برغر|همبرجر/.test(s)) return '🍔';
+    if (/drink|cola|juice|shake|lemon|coffee|tea|عصير|كولا|مشروب|شاي|قهوة|ليمون|ميلك/.test(s)) return '🥤';
+    if (/side|fries|ring|chip|بطاطا|جانب|مقبل|حلقات/.test(s)) return '🍟';
+    if (/sweet|dessert|cake|cookie|brownie|ice|shake|حلو|كيك|كوكي|براوني|آيس|بوظة/.test(s)) return '🍦';
+    return '🍽️';
   }
 
-  /* Restaurant brand colors: logo tile (primary) + cover tint (secondary).
-     Design chrome stays fixed — these are identity slots only. */
-  function brand() {
-    const s = (view && view.settings) || {};
-    const out = { logoBg: null, logoFg: '#fff9ed', tint: null };
-    if (/^#[0-9a-f]{6}$/i.test(s.primaryColor || '')) {
-      out.logoBg = s.primaryColor;
-      try { out.logoFg = theme.buildTokens(s.primaryColor, '#000000')['--on-primary']; } catch (_) { /* keep default */ }
+  /* --------------------------- live mapping ------------------------ */
+  function mapView(data) {
+    view = data;
+    var settings = data.settings || {};
+    // Honor the business storefront language (settings.storefrontLanguage).
+    if (settings.storefrontLanguage === 'en' || settings.storefrontLanguage === 'ar') {
+      state.language = settings.storefrontLanguage;
     }
-    if (/^#[0-9a-f]{6}$/i.test(s.secondaryColor || '')) {
-      const rgb = theme.hexToRgb(s.secondaryColor);
-      if (rgb) out.tint = 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',.28)';
+    categories = [{ id: 'all', label: null, emoji: '🍽️' }].concat(
+      (data.categories || []).map(function (c) {
+        return { id: String(c.id), label: c.name, emoji: emojiFor(c.name) };
+      })
+    );
+    dishes = (data.items || []).filter(function (it) { return it.is_available !== false; }).map(function (it) {
+      var imgs = it.images && it.images.length ? it.images : (it.image_path ? [it.image_path] : []);
+      return {
+        id: String(it.id),
+        category: String(it.category_id),
+        name: { ar: it.name, en: it.name },
+        description: { ar: it.description || '', en: it.description || '' },
+        priceCents: Number(it.price_cents) || 0,
+        image: imgs[0] || FALLBACK_IMG,
+        tag: it.is_popular ? 'bestSeller' : null,
+        popular: !!it.is_popular,
+        options: (it.options || []).map(function (g) {
+          return {
+            id: String(g.id),
+            required: !!g.is_required,
+            label: { ar: g.name, en: g.name },
+            choices: (g.choices || []).filter(function (c) { return c.is_available !== false; }).map(function (c) {
+              return { id: String(c.id), label: { ar: c.name, en: c.name }, extraCents: Number(c.price_cents) || 0 };
+            }),
+          };
+        }).filter(function (g) { return g.choices.length > 0; }),
+      };
+    });
+    var heroes = data.heroImages || [];
+    if (heroes.length) {
+      coverSlides = heroes.map(function (h) {
+        return { image: h.imagePath, alt: { ar: data.name, en: data.name } };
+      });
+    } else if (settings.coverPath) {
+      coverSlides = [{ image: settings.coverPath, alt: { ar: data.name, en: data.name } }];
+    } else {
+      coverSlides = [
+        { image: '/demo/images/red-bun-campaign-1.jpg', alt: { ar: data.name, en: data.name } },
+        { image: '/demo/images/red-bun-campaign-2.jpg', alt: { ar: data.name, en: data.name } },
+      ];
     }
+    var logo = $('#restaurantLogo');
+    if (logo && settings.logoPath) logo.src = settings.logoPath;
+    // Drop cart lines for dishes that no longer exist.
+    state.cart = state.cart.filter(function (line) { return getDish(line.dishId); });
+  }
+
+  /* ------------------------------ cover ---------------------------- */
+  function showCover(index) {
+    if (!coverSlides.length) return;
+    state.coverIndex = ((index % coverSlides.length) + coverSlides.length) % coverSlides.length;
+    $$('.cover-slide').forEach(function (slide, slideIndex) {
+      var active = slideIndex === state.coverIndex;
+      slide.classList.toggle('is-active', active);
+      slide.setAttribute('aria-hidden', String(!active));
+    });
+    $$('.cover-dot').forEach(function (dot, dotIndex) {
+      var active = dotIndex === state.coverIndex;
+      dot.classList.toggle('is-active', active);
+      if (active) dot.setAttribute('aria-current', 'true');
+      else dot.removeAttribute('aria-current');
+    });
+  }
+  function startCoverAutoplay() {
+    window.clearInterval(state.coverTimer);
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    state.coverTimer = window.setInterval(function () {
+      if (!state.coverPaused && !document.hidden) showCover(state.coverIndex + 1);
+    }, 5200);
+  }
+  function navigateCover(index) { showCover(index); startCoverAutoplay(); }
+  function initializeCoverCarousel() {
+    var carousel = $('#coverCarousel');
+    if (!carousel) return;
+    $('#coverTrack').innerHTML = coverSlides.map(function (slide, index) {
+      return '<div class="cover-slide' + (index === 0 ? ' is-active' : '') + '" aria-hidden="' + (index !== 0) + '"' +
+        ' aria-roledescription="slide" aria-label="' + (index + 1) + ' / ' + coverSlides.length + '">' +
+        '<img src="' + escapeHTML(slide.image) + '" alt="' + escapeHTML(localize(slide.alt)) + '"' +
+        (index === 0 ? ' fetchpriority="high"' : ' loading="lazy"') + ' /></div>';
+    }).join('');
+    $('#coverPagination').innerHTML = coverSlides.map(function (_, index) {
+      return '<button class="cover-dot' + (index === 0 ? ' is-active' : '') + '" type="button"' +
+        ' data-cover-index="' + index + '" aria-label="' + escapeHTML(getCopy('showCover')) + ' ' + (index + 1) + '"' +
+        (index === 0 ? ' aria-current="true"' : '') + '></button>';
+    }).join('');
+    showCover(0);
+    if (carousel.dataset.wired) return;
+    carousel.dataset.wired = '1';
+    carousel.addEventListener('click', function (event) {
+      var control = event.target.closest('[data-cover-step], [data-cover-index]');
+      if (!control) return;
+      if (control.hasAttribute('data-cover-step')) navigateCover(state.coverIndex + Number(control.dataset.coverStep));
+      else navigateCover(Number(control.dataset.coverIndex));
+    });
+    carousel.addEventListener('pointerenter', function () { state.coverPaused = true; });
+    carousel.addEventListener('pointerleave', function () { state.coverPaused = false; });
+    carousel.addEventListener('focusin', function () { state.coverPaused = true; });
+    carousel.addEventListener('focusout', function (event) {
+      if (!carousel.contains(event.relatedTarget)) state.coverPaused = false;
+    });
+    var touchStartX = null;
+    carousel.addEventListener('touchstart', function (event) {
+      touchStartX = (event.changedTouches[0] && event.changedTouches[0].clientX) || null;
+    }, { passive: true });
+    carousel.addEventListener('touchend', function (event) {
+      if (touchStartX === null) return;
+      var distance = event.changedTouches[0].clientX - touchStartX;
+      touchStartX = null;
+      if (Math.abs(distance) > 45) navigateCover(state.coverIndex + (distance < 0 ? 1 : -1));
+    }, { passive: true });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) window.clearInterval(state.coverTimer);
+      else startCoverAutoplay();
+    });
+    startCoverAutoplay();
+  }
+
+  /* --------------------------- menu render ------------------------- */
+  function categoryLabel(cat) {
+    if (cat.id === 'all') return getCopy('all');
+    return cat.label || cat.id;
+  }
+  function categoryMarkup() {
+    return categories.map(function (category) {
+      var active = state.category === category.id;
+      var count = category.id === 'all'
+        ? dishes.length
+        : dishes.filter(function (dish) { return dish.category === category.id; }).length;
+      return '<button class="category-pill' + (active ? ' active' : '') + '" type="button"' +
+        ' data-category="' + escapeHTML(category.id) + '" aria-pressed="' + active + '">' +
+        '<span class="category-emoji" aria-hidden="true">' + category.emoji + '</span>' +
+        '<span>' + escapeHTML(categoryLabel(category)) + '</span>' +
+        '<span class="category-count">' + count + '</span></button>';
+    }).join('');
+  }
+  function initializeCategoryDock() {
+    var strip = $('#categoryStrip');
+    var sentinel = $('#categoryDockSentinel');
+    if (!strip || !sentinel || strip.dataset.wired) return;
+    strip.dataset.wired = '1';
+    var frameQueued = false;
+    var isCompact = false;
+    function updateCompactState() {
+      frameQueued = false;
+      var sentinelTop = sentinel.getBoundingClientRect().top;
+      if (!isCompact && sentinelTop < -6) isCompact = true;
+      else if (isCompact && sentinelTop > 6) isCompact = false;
+      strip.classList.toggle('is-compact', isCompact);
+    }
+    function queueUpdate() {
+      if (frameQueued) return;
+      frameQueued = true;
+      window.requestAnimationFrame(updateCompactState);
+    }
+    window.addEventListener('scroll', queueUpdate, { passive: true });
+    window.addEventListener('resize', queueUpdate);
+    queueUpdate();
+  }
+  function dishMarkup(dish) {
+    var name = localize(dish.name);
+    var hasOptions = dish.options.length > 0;
+    var quickLabel = hasOptions ? getCopy('options') : getCopy('addToOrder');
+    var tag = dish.tag
+      ? '<span class="dish-tag"><span aria-hidden="true">' + (dish.tag === 'bestSeller' ? '🔥' : '🌿') + '</span>' +
+        escapeHTML(getCopy(dish.tag)) + '</span>'
+      : '';
+    return '<article class="dish-card dish-row">' +
+      '<button class="dish-photo" type="button" data-open-dish="' + escapeHTML(dish.id) + '" aria-label="' + escapeHTML(name) + '">' +
+      '<img src="' + escapeHTML(dish.image) + '" alt="' + escapeHTML(name) + '" loading="lazy" />' + tag + '</button>' +
+      '<button class="add-quick" type="button" data-quick-add="' + escapeHTML(dish.id) + '" aria-label="' + escapeHTML(quickLabel) + '">' +
+      '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg></button>' +
+      '<button class="dish-content" type="button" data-open-dish="' + escapeHTML(dish.id) + '">' +
+      '<span class="dish-title-row"><span class="dish-name">' + escapeHTML(name) + '</span>' +
+      '<span class="dish-price">' + escapeHTML(money(dish.priceCents)) + '</span></span>' +
+      '<span class="dish-description">' + escapeHTML(localize(dish.description)) + '</span>' +
+      '<span class="dish-foot"><span class="food-markers"><span class="food-dot" aria-hidden="true"></span>' +
+      escapeHTML(getCopy('tableService')) + '</span><span>' +
+      escapeHTML(hasOptions ? getCopy('options') : getCopy('addToOrder')) + '</span></span></button></article>';
+  }
+  function normalizeSearch(value) {
+    return String(value || '').trim().toLocaleLowerCase().replace(/[ً-ٰٟ]/g, '');
+  }
+  function renderMenu() {
+    var strip = $('#categoryStrip');
+    if (strip) strip.innerHTML = categoryMarkup();
+    var query = normalizeSearch(state.query);
+    var visibleDishes = dishes.filter(function (dish) {
+      var categoryMatches = state.category === 'all' || dish.category === state.category;
+      if (!categoryMatches) return false;
+      if (!query) return true;
+      var searchable = normalizeSearch([
+        dish.name.ar, dish.name.en, dish.description.ar, dish.description.en,
+      ].join(' '));
+      return searchable.indexOf(query) !== -1;
+    });
+    var grid = $('#dishGrid');
+    if (!grid) return;
+    grid.setAttribute('aria-busy', 'false');
+    if (!visibleDishes.length) {
+      grid.innerHTML = '<div class="no-results"><span class="no-results-mark" aria-hidden="true"></span>' +
+        '<h3>' + escapeHTML(getCopy('noResultsTitle')) + '</h3>' +
+        '<p>' + escapeHTML(getCopy('noResultsText')) + '</p></div>';
+      return;
+    }
+    var visibleSections = categories
+      .filter(function (category) { return category.id !== 'all'; })
+      .map(function (category) {
+        return {
+          id: category.id, emoji: category.emoji, label: categoryLabel(category),
+          items: visibleDishes.filter(function (dish) { return dish.category === category.id; }),
+        };
+      })
+      .filter(function (category) { return category.items.length > 0; });
+    // Dishes whose category vanished from the backend still render.
+    var orphaned = visibleDishes.filter(function (dish) {
+      return !visibleSections.some(function (s) { return s.id === dish.category; });
+    });
+    if (orphaned.length) {
+      visibleSections.push({ id: 'all', emoji: '🍽️', label: getCopy('all'), items: orphaned });
+    }
+    grid.innerHTML = visibleSections.map(function (category) {
+      return '<section class="dish-section" aria-labelledby="section-' + escapeHTML(category.id) + '">' +
+        '<div class="dish-section-heading"><h3 id="section-' + escapeHTML(category.id) + '">' +
+        '<span class="section-emoji" aria-hidden="true">' + category.emoji + '</span>' +
+        '<span>' + escapeHTML(category.label) + '</span></h3>' +
+        '<span class="section-count">' + category.items.length + '</span></div>' +
+        '<div class="dish-list">' + category.items.map(dishMarkup).join('') + '</div></section>';
+    }).join('');
+  }
+  function getDish(dishId) {
+    return dishes.filter(function (dish) { return dish.id === String(dishId); })[0] || null;
+  }
+  function getSelectedChoices(dish, selections) {
+    selections = selections || {};
+    var out = [];
+    dish.options.forEach(function (group) {
+      (selections[group.id] || []).forEach(function (choiceId) {
+        var choice = null;
+        group.choices.forEach(function (item) { if (item.id === choiceId) choice = item; });
+        if (choice) out.push({ group: group, choice: choice });
+      });
+    });
     return out;
   }
-
-  function renderContent() {
-    const s = view.settings || {};
-    const cover = s.coverPath || FOOD;
-    const addr = s.address ? '<span>' + esc(s.address) + '</span>' : '';
-    const phone = s.phone ? '<span><a href="tel:' + esc(s.phone.replace(/[^+\d]/g, '')) + '">' + esc(s.phone) + '</a></span>' : '';
-    const waDigits = (s.whatsapp || '').replace(/\D/g, '');
-    const wa = waDigits ? '<span><a href="https://wa.me/' + esc(waDigits) + '" target="_blank" rel="noopener">WhatsApp</a></span>' : '';
-    const del = hasDelivery() ? '<span>' + esc(t().deliveryBy + ': ' + view.deliveryGroups.join('، ')) + '</span>' : '';
-    const cats = [{ id: 'all', name: t().all }, { id: 'popular', name: t().popular }]
-      .concat(view.categories.map((c) => ({ id: c.id, name: c.name })));
-
-    const heroImgs = (view.heroImages && view.heroImages.length)
-      ? view.heroImages.map((h) => h.imagePath)
-      : [cover];
-    const heroInner = heroImgs.length > 1
-      ? '<div class="hero-carousel" id="hero-carousel">' + heroImgs.map((src, i) =>
-          '<img class="hero-slide' + (i === 0 ? ' active' : '') + '" src="' + esc(src) + '" alt=""' + (i === 0 ? '' : ' loading="lazy"') + ' width="1920" height="1080">'
-        ).join('') +
-        '<button class="hero-nav hero-prev" id="hero-prev" aria-label="Previous">‹</button>' +
-        '<button class="hero-nav hero-next" id="hero-next" aria-label="Next">›</button>' +
-        '<div class="hero-dots">' + heroImgs.map((_, i) =>
-          '<button class="hero-dot' + (i === 0 ? ' active' : '') + '" data-hero="' + i + '" aria-label="Slide ' + (i + 1) + '"></button>'
-        ).join('') + '</div></div>'
-      : '<img src="' + esc(heroImgs[0]) + '" alt="" width="1920" height="1080">';
-
-    $content().innerHTML =
-      '<section class="live-hero">' + heroInner +
-        (brand().tint ? '<div class="live-hero-tint" style="background:' + esc(brand().tint) + '"></div>' : '') +
-        '<div class="live-hero-content"><div class="live-hero-top">' +
-          '<span class="status"><i></i>' + esc(view.openNow ? t().open : t().closed) + '</span>' +
-          '<span style="display:flex;gap:8px"><button class="outline-btn" style="color:var(--paper);border-color:rgba(255,255,255,.25)" id="share-btn">' + esc(t().share) + '</button>' +
-          '<button class="outline-btn" style="color:var(--paper);border-color:rgba(255,255,255,.25)" id="book-btn"' + (view.orderingBlocked ? ' disabled' : '') + '>' + esc(t().book) + '</button></span>' +
-        '</div><div><h1>' + esc((lang === 'en' && s.nameEn) ? s.nameEn : view.name) + '</h1>' +
-        (s.description ? '<p>' + esc(s.description) + '</p>' : '') +
-        '<div class="live-meta">' + addr + phone + wa + del + '</div></div></div></section>' +
-      (!view.openNow ? '<div class="live-alert warn">' + esc(t().closedNotice) + '</div>' : '') +
-      (view.orderingBlocked ? '<div class="live-alert warn" role="status">' + esc(t()[view.noticeKey === 'sub_store_suspended' ? 'subStoreSuspended' : 'subStoreExpired']) + '</div>' : '') +
-      '<section class="live-section-head"><div><small>' + esc(t().menuEye) + '</small><h2>' + esc(t().menuTitle) + '</h2></div></section>' +
-      '<label class="search"><input id="menu-search" maxlength="60" aria-label="' + esc(t().search) + '" value="' + esc(searchTerm) + '" placeholder="' + esc(t().search) + '"></label>' +
-      '<nav class="category-nav" aria-label="' + esc(t().all) + '">' + cats.map((c) =>
-        '<button class="' + (c.id === activeCategory ? 'active' : '') + '" aria-pressed="' + (c.id === activeCategory) + '" data-cat="' + esc(c.id) + '">' + esc(c.name) + '</button>'
-      ).join('') + '</nav>' +
-      '<div id="dish-zone"></div>';
-
-    document.getElementById('share-btn').addEventListener('click', sharePage);
-    document.getElementById('book-btn').addEventListener('click', () => { bookingOpen = true; cartOpen = false; renderOverlay(); });
-    document.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => {
-      activeCategory = b.dataset.cat;
-      document.querySelectorAll('[data-cat]').forEach((x) => {
-        const on = x === b;
-        x.classList.toggle('active', on);
-        x.setAttribute('aria-pressed', String(on));
-      });
-      updateGrids();
-    }));
-    document.getElementById('menu-search').addEventListener('input', (e) => {
-      searchTerm = e.target.value.trim().toLowerCase();
-      updateGrids();
-    });
-    initHeroCarousel(heroImgs.length);
-    updateGrids();
+  function selectedTotalCents(dish, selections) {
+    return dish.priceCents + getSelectedChoices(dish, selections).reduce(function (sum, entry) {
+      return sum + entry.choice.extraCents;
+    }, 0);
   }
-
-  function initHeroCarousel(count) {
-    const root = document.getElementById('hero-carousel');
-    if (!root || count < 2) return;
-    const slides = root.querySelectorAll('.hero-slide');
-    const dots = root.querySelectorAll('.hero-dot');
-    let idx = 0;
-    let timer = null;
-    const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    function show(i) {
-      idx = (i + slides.length) % slides.length;
-      slides.forEach((s, k) => s.classList.toggle('active', k === idx));
-      dots.forEach((d, k) => d.classList.toggle('active', k === idx));
-    }
-    function play() {
-      if (reduced) return;
-      stop();
-      timer = setInterval(() => show(idx + 1), 5000);
-    }
-    function stop() { if (timer) { clearInterval(timer); timer = null; } }
-    document.getElementById('hero-prev').addEventListener('click', () => { show(idx - 1); play(); });
-    document.getElementById('hero-next').addEventListener('click', () => { show(idx + 1); play(); });
-    dots.forEach((d) => d.addEventListener('click', () => { show(Number(d.dataset.hero)); play(); }));
-    let touchX = null;
-    root.addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; stop(); }, { passive: true });
-    root.addEventListener('touchend', (e) => {
-      if (touchX !== null) {
-        const dx = e.changedTouches[0].clientX - touchX;
-        if (Math.abs(dx) > 40) show(idx + (dx < 0 ? 1 : -1));
-      }
-      touchX = null; play();
-    });
-    root.addEventListener('pointerenter', stop);
-    root.addEventListener('pointerleave', play);
-    play();
-  }
-
-  function updateGrids() {
-    const zone = document.getElementById('dish-zone');
-    if (!zone || !view) return;
-    if (view.items.length === 0) {
-      zone.innerHTML = '<div class="live-alert warn">' + esc(t().menuEmpty) + '</div>';
-      return;
-    }
-    const items = view.items.filter(itemVisible);
-    const showFeatured = activeCategory === 'all' && !searchTerm;
-    const featured = showFeatured ? items.filter((i) => i.is_popular) : [];
-    const rest = showFeatured ? items.filter((i) => !i.is_popular) : items;
-    const label = activeCategory === 'all' ? (showFeatured ? t().full : t().all)
-      : activeCategory === 'popular' ? t().popular
-      : (view.categories.find((x) => x.id === activeCategory) || {}).name || t().all;
-
-    zone.innerHTML =
-      (featured.length
-        ? '<section class="dish-section"><div class="dish-section-head"><h2>' + esc(t().featured) + '</h2><span>' + String(featured.length).padStart(2, '0') + '</span></div>' +
-          '<div class="dish-grid">' + featured.map(dishCard).join('') + '</div></section>'
-        : '') +
-      '<section class="dish-section"><div class="dish-section-head"><h2>' + esc(label) + '</h2><span>' + String(rest.length).padStart(2, '0') + '</span></div>' +
-        '<div class="dish-grid">' + (rest.map(dishCard).join('') || '<div class="empty-results">' + esc(t().noMatch) + '</div>') + '</div></section>';
-
-    zone.querySelectorAll('[data-plus]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); changeCart(b.dataset.plus, 1); }));
-    zone.querySelectorAll('[data-minus]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); changeCart(b.dataset.minus, -1); }));
-    zone.querySelectorAll('[data-open]').forEach((card) => {
-      card.addEventListener('click', (e) => { if (!e.target.closest('button')) openSheet(card.dataset.open); });
-      card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSheet(card.dataset.open); } });
+  function getModalValidity(dish) {
+    return dish.options.every(function (group) {
+      return !group.required || (state.modalSelections[group.id] || []).length > 0;
     });
   }
 
-  /* ---------------------- product detail sheet ---------------------- */
-  let sheetItem = null;
-  let sheetQty = 1;
-  function openSheet(itemId) {
-    const item = view.items.find((i) => i.id === itemId);
-    if (!item) return;
-    sheetItem = item;
-    sheetQty = 1;
-    renderSheet();
+  /* ------------------------------- modal --------------------------- */
+  function openDish(dishId, trigger) {
+    var dish = getDish(dishId);
+    if (!dish) return;
+    state.previousFocus = trigger || document.activeElement;
+    state.modalDishId = dish.id;
+    state.modalSelections = {};
+    state.modalQuantity = 1;
+    state.cartOpen = false;
+    renderCartDrawer();
+    renderModal();
+    document.body.classList.add('overlay-open');
+    requestAnimationFrame(function () { var c = $('.dish-modal-close'); if (c) c.focus(); });
   }
-  function closeSheet() {
-    sheetItem = null;
-    const el = document.getElementById('product-sheet-root');
-    if (el) el.innerHTML = '';
-    document.body.classList.remove('sheet-open');
-    const wasCard = document.querySelector('[data-open="' + (lastSheetId || '') + '"]');
-    if (wasCard) { try { wasCard.focus({ preventScroll: true }); } catch (_) {} }
-  }
-  let lastSheetId = null;
-  function renderSheet() {
-    if (!sheetItem) return;
-    lastSheetId = sheetItem.id;
-    const item = sheetItem;
-    const hasOpts = (item.options || []).length > 0;
-    // Find category name for context
-    let categoryName = '';
-    if (item.category_id) {
-      const cat = view.categories.find((c) => c.id === item.category_id);
-      if (cat) categoryName = cat.name;
-    }
-    let root = document.getElementById('product-sheet-root');
-    if (!root) {
-      root = document.createElement('div');
-      root.id = 'product-sheet-root';
-      document.body.appendChild(root);
-    }
-    const optsHtml = hasOpts ? pickerHtml(item) : '';
-    root.innerHTML =
-      '<div class="product-sheet-backdrop" id="sheet-backdrop"></div>' +
-      '<section class="product-sheet" role="dialog" aria-modal="true" aria-label="' + esc(item.name) + '">' +
-        '<button class="sheet-close" id="sheet-close" aria-label="Close">×</button>' +
-        '<img class="sheet-img" src="' + esc(item.image_path || FOOD) + '" alt="' + esc(item.name) + '">' +
-        '<h2>' + esc(item.name) + '</h2>' +
-        (categoryName ? '<p class="sheet-category muted small">' + esc(categoryName) + '</p>' : '') +
-        (item.description ? '<p class="sheet-desc">' + esc(item.description) + '</p>' : '') +
-        '<p class="price-red sheet-price">' + esc(money(item.price_cents)) + '</p>' +
-        (item.is_available ? '<p class="sheet-status ok">' + esc(t().open) + '</p>' : '<p class="sheet-status sold">' + esc(t().soldOut) + '</p>') +
-        optsHtml +
-        '<div class="sheet-qty"><div class="qty" aria-label="' + esc(item.name) + '">' +
-          '<button id="sheet-minus">−</button><span>' + sheetQty + '</span><button id="sheet-plus">＋</button></div>' +
-          '<button class="co-submit" id="sheet-add"' + (item.is_available ? '' : ' disabled') + '>' + esc(t().add) + '</button></div>' +
-        '<p class="sheet-total" aria-live="polite">' + esc(t().total) + ': <strong id="sheet-total-val">' + esc(money(estimateSheetTotal(item, sheetQty))) + '</strong></p>' +
-      '</section>';
-    document.body.classList.add('sheet-open');
-    document.getElementById('sheet-backdrop').addEventListener('click', closeSheet);
-    document.getElementById('sheet-close').addEventListener('click', closeSheet);
-    document.getElementById('sheet-minus').addEventListener('click', () => { sheetQty = Math.max(1, sheetQty - 1); renderSheet(); });
-    document.getElementById('sheet-plus').addEventListener('click', () => { sheetQty += 1; renderSheet(); });
-    document.getElementById('sheet-add').addEventListener('click', () => {
-      if (hasOpts) {
-        if (!picksValid(item)) {
-          const err = document.getElementById('opterr-' + item.id);
-          if (err) err.classList.remove('hidden');
-          return;
-        }
-        for (let i = 0; i < sheetQty; i++) addWithPicks(item.id);
-      } else {
-        changeCart(item.id, sheetQty);
-      }
-      closeSheet();
-    });
-    wirePicks(root);
-    const sheet = root.querySelector('.product-sheet');
-    sheet.setAttribute('tabindex', '-1');
-    try { sheet.focus({ preventScroll: true }); } catch (_) {}
-    sheet.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); closeSheet(); }
-      if (e.key === 'Tab') {
-        const f = sheet.querySelectorAll('button, [href], input, [tabindex]:not([tabindex="-1"])');
-        if (!f.length) return;
-        const first = f[0], last = f[f.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-      }
-    });
-  }
-
-  function estimateSheetTotal(item, qty) {
-    const itemHasOpts = (item.options || []).length > 0;
-    let unit = item.price_cents;
-    if (itemHasOpts) {
-      const pm = picks[item.id] || {};
-      for (const [gid, choices] of Object.entries(pm)) {
-        const g = (item.options || []).find((x) => x.id === gid);
-        if (!g) continue;
-        for (const [cid, cq] of Object.entries(choices)) {
-          const ch = (g.choices || []).find((x) => x.id === cid);
-          if (ch) {
-            if (g.pricing === 'replace') unit = ch.price_cents;
-            else unit += ch.price_cents;
-          }
-        }
-      }
-    }
-    return unit * qty;
-  }
-
-  function dishCard(item) {
-    const hasOpts = (item.options || []).length > 0;
-    const q = (!hasOpts && Number.isInteger(cart[item.id])) ? cart[item.id] : 0;
-    const img = '<div class="dish-img"><img loading="lazy" src="' + esc(item.image_path || FOOD) + '" alt="' + esc(item.name) + '">' +
-      (item.is_popular ? '<b>' + esc(t().top) + '</b>' : '') + '</div>';
-    let action = '';
-    if (!item.is_available) {
-      action = '<span class="soldout-tag">' + esc(t().soldOut) + '</span>';
-    } else if (!hasOpts && q) {
-      action = qtyCtl(item.id, q, item.name);
-    }
-    return '<article class="dish" data-open="' + esc(item.id) + '" role="button" tabindex="0" aria-label="' + esc(item.name) + '">' + img +
-      '<div class="dish-main"><div><h3>' + esc(item.name) + '</h3>' +
-      (item.description ? '<p>' + esc(item.description) + '</p>' : '') +
-      (item.is_preorder ? '<p><span class="preorder-tag">' + esc(t().preorderBadge) + '</span>' +
-        (item.preorder_note ? ' <span>' + esc(item.preorder_note) + '</span>' : '') + '</p>' : '') + '</div>' +
-      '<div class="dish-foot"><span class="price-red">' + esc(money(item.price_cents)) + '</span>' + action + '</div>' +
-      '</div></article>';
-  }
-
-  const qtyCtl = (id, q, label) =>
-    '<div class="qty" aria-label="' + esc(label) + '"><button data-minus="' + esc(id) + '">−</button><span>' + q + '</span><button data-plus="' + esc(id) + '">＋</button></div>';
-
-  function renderBar() {
-    const units = totalUnits();
-    const bar = $bar();
-    if (units === 0) { bar.classList.add('hidden'); return; }
-    bar.classList.remove('hidden');
-    bar.innerHTML = '<span>' + esc(t().cart + ' (' + units + ')') + '</span><span>' + esc(money(subtotalCents())) + ' ‹</span>';
-  }
-
-  /* ---------------------------- overlay ---------------------------- */
-  function stashCo() {
-    const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
-    if (document.getElementById('checkout-form')) {
-      co = { name: g('co-name'), wa: g('co-wa'), phone: g('co-phone'), address: g('co-address'), notes: g('co-notes') };
+  function closeDish() {
+    if (!state.modalDishId) return;
+    state.modalDishId = null;
+    $('#modalRoot').innerHTML = '';
+    document.body.classList.remove('overlay-open');
+    if (state.previousFocus && state.previousFocus.focus) {
+      try { state.previousFocus.focus(); } catch (_) { /* ignore */ }
     }
   }
-
-  function renderOverlay() {
-    const root = $overlay();
-    if (bookingOpen) { root.innerHTML = bookingHtml(); wireBooking(); focusModal(root); return; }
-    if (!cartOpen) { root.innerHTML = ''; return; }
-    const entries = cartEntries();
-    if (!entries.length) {
-      root.innerHTML = '<div class="cart-overlay"><section class="cart-modal"><div class="cart-title"><div><h2>' +
-        esc(t().cartEmpty) + '</h2></div><button class="cart-close" data-close>×</button></div>' +
-        '<p style="color:rgba(32,61,58,.6);font-size:13px">' + esc(t().cartEmptyHint) + '</p>' +
-        '<div class="cart-total" aria-live="polite" aria-atomic="true" style="display:flex;justify-content:space-between"><span>' + esc(t().total) + '</span><span>' + esc(money(0)) + '</span></div>' +
-        '<button class="co-ghost" data-close>' + esc(t().keepBrowsing) + '</button></section></div>';
-      root.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeOverlay));
-      focusModal(root);
-      return;
+  function modalMarkup(dish) {
+    var selected = state.modalSelections;
+    var optionsMarkup = dish.options.map(function (group) {
+      var isRadio = group.required;
+      var selectedIds = selected[group.id] || [];
+      var choices = group.choices.map(function (choice) {
+        var inputType = isRadio ? 'radio' : 'checkbox';
+        var checked = selectedIds.indexOf(choice.id) !== -1;
+        var amount = choice.extraCents ? '+ ' + money(choice.extraCents) : '';
+        return '<label class="option-choice"><span><input type="' + inputType + '" name="option-' + escapeHTML(group.id) + '"' +
+          ' value="' + escapeHTML(choice.id) + '" data-option-choice data-group="' + escapeHTML(group.id) + '"' +
+          ' data-choice="' + escapeHTML(choice.id) + '"' + (checked ? ' checked' : '') + ' />' +
+          '<span>' + escapeHTML(localize(choice.label)) + '</span></span>' +
+          (amount ? '<span class="choice-price">' + escapeHTML(amount) + '</span>' : '') + '</label>';
+      }).join('');
+      return '<fieldset class="option-section"><legend class="option-heading"><strong>' +
+        escapeHTML(localize(group.label)) + '</strong>' +
+        '<span class="' + (group.required ? 'required-pill' : 'optional-pill') + '">' +
+        escapeHTML(getCopy(group.required ? 'required' : 'optional')) + '</span></legend>' + choices + '</fieldset>';
+    }).join('');
+    var selectedPrice = selectedTotalCents(dish, selected) * state.modalQuantity;
+    var valid = getModalValidity(dish);
+    var title = localize(dish.name);
+    return '<div class="modal-backdrop" data-close-modal><section class="dish-modal" role="dialog"' +
+      ' aria-modal="true" aria-labelledby="modalTitle" tabindex="-1"><div class="modal-image">' +
+      '<img src="' + escapeHTML(dish.image) + '" alt="' + escapeHTML(title) + '" />' +
+      (dish.tag ? '<span class="dish-tag">' + escapeHTML(getCopy(dish.tag)) + '</span>' : '') + '</div>' +
+      '<div class="modal-body"><button class="close-modal dish-modal-close" type="button" data-close-modal' +
+      ' aria-label="' + escapeHTML(getCopy('close')) + '">' +
+      '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" /></svg></button>' +
+      '<p class="section-kicker">' + escapeHTML(getCopy('options')) + '</p>' +
+      '<h2 id="modalTitle">' + escapeHTML(title) + '</h2>' +
+      '<p class="modal-description">' + escapeHTML(localize(dish.description)) + '</p>' +
+      '<div class="modal-base-price">' + escapeHTML(money(dish.priceCents)) + '</div>' +
+      (optionsMarkup ? '<div class="modal-options">' + optionsMarkup + '</div>' : '') +
+      '<div class="modal-actions"><div class="modal-quantity" aria-label="' + escapeHTML(title) + '">' +
+      '<button type="button" data-modal-quantity="-1" aria-label="' + escapeHTML(getCopy('decrease')) + '">−</button>' +
+      '<span id="modalQuantity">' + state.modalQuantity + '</span>' +
+      '<button type="button" data-modal-quantity="1" aria-label="' + escapeHTML(getCopy('increase')) + '">+</button></div>' +
+      '<button class="add-to-cart" type="button" data-add-modal' + (valid ? '' : ' disabled') + '>' +
+      '<span>' + escapeHTML(valid ? getCopy('addToOrder') : getCopy('chooseOption')) + '</span>' +
+      '<strong id="modalTotal">' + escapeHTML(money(selectedPrice)) + '</strong></button></div></div></section></div>';
+  }
+  function renderModal() {
+    var dish = state.modalDishId ? getDish(state.modalDishId) : null;
+    if (!dish) { $('#modalRoot').innerHTML = ''; return; }
+    $('#modalRoot').innerHTML = modalMarkup(dish);
+  }
+  function updateModalSummary() {
+    var dish = getDish(state.modalDishId);
+    if (!dish) return;
+    var valid = getModalValidity(dish);
+    var addButton = $('[data-add-modal]');
+    if (!addButton) return;
+    addButton.disabled = !valid;
+    addButton.querySelector('span').textContent = valid ? getCopy('addToOrder') : getCopy('chooseOption');
+    $('#modalTotal').textContent = money(selectedTotalCents(dish, state.modalSelections) * state.modalQuantity);
+  }
+  function addDishToCart(dishId, selections, quantity) {
+    var dish = getDish(dishId);
+    if (!dish) return;
+    selections = selections || {};
+    quantity = quantity || 1;
+    var orderedIds = getSelectedChoices(dish, selections).map(function (entry) { return entry.choice.id; });
+    orderedIds.sort();
+    var key = dish.id + '|' + orderedIds.join(',');
+    var existing = null;
+    state.cart.forEach(function (line) { if (line.key === key) existing = line; });
+    if (existing) {
+      existing.quantity = Math.min(99, existing.quantity + quantity);
+    } else {
+      var copySel = {};
+      Object.keys(selections).forEach(function (groupId) { copySel[groupId] = selections[groupId].slice(); });
+      state.cart.push({ key: key, dishId: dish.id, selections: copySel, quantity: quantity });
     }
-    const sub = subtotalCents(), fee = feeCents();
-    root.innerHTML = '<div class="cart-overlay"><section class="cart-modal">' +
-      '<div class="cart-title"><div><small>' + totalUnits() + ' ' + esc(t().items) + '</small><h2>' + esc(t().cart) + '</h2></div>' +
-      '<button class="cart-close" data-close>×</button></div>' +
-      entries.map((e) => {
-        const names = selNames(e.item, e.selections);
-        const poNote = e.item.is_preorder
-          ? '<small>' + esc(t().preorderBadge) + (e.item.preorder_note ? ': ' + esc(e.item.preorder_note) : '') + '</small>'
-          : '';
-        return '<div class="cart-row"><img src="' + esc(e.item.image_path || FOOD) + '" alt="">' +
-          '<div class="cart-row-main"><strong>' + esc(e.item.name) + '</strong>' +
-          (names ? '<small>' + esc(names) + '</small>' : '') + poNote +
-          '<small>' + esc(money(estimateUnit(e.item, e.selections) * e.qty)) + '</small></div>' +
-          qtyCtl(e.key, e.qty, e.item.name) + '</div>';
-      }).join('') +
-      (hasDelivery()
-        ? '<div class="co-type"><button data-type="pickup"' + (orderType === 'pickup' ? ' class="active"' : '') + '>' + esc(t().pickup) + '</button>' +
-          '<button data-type="delivery"' + (orderType === 'delivery' ? ' class="active"' : '') + '>' + esc(t().delivery) + '</button></div>'
-        : '') +
-      '<div class="cart-total" aria-live="polite" aria-atomic="true" style="display:grid;gap:6px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>' + esc(t().subtotal) + '</span><span>' + esc(money(sub)) + '</span></div>' +
-      (orderType === 'delivery' ? '<div style="display:flex;justify-content:space-between;font-size:13px"><span>' + esc(t().deliveryFee) + '</span><span>' + esc(money(fee)) + '</span></div>' : '') +
-      '<div style="display:flex;justify-content:space-between"><span>' + esc(t().total) + '</span><span>' + esc(money(sub + fee)) + '</span></div></div>' +
-      '<form id="checkout-form" class="co-form" novalidate>' +
-        '<label>' + esc(t().yourName) + '<input id="co-name" maxlength="80" autocomplete="name" value="' + esc(co.name) + '"></label>' +
-        '<label>' + esc(t().waNumber) + '<input id="co-wa" type="tel" maxlength="20" dir="ltr" autocomplete="tel" value="' + esc(co.wa) + '"></label>' +
-        '<label>' + esc(t().phoneOpt) + '<input id="co-phone" type="tel" maxlength="20" dir="ltr" value="' + esc(co.phone) + '"></label>' +
-        '<label>' + esc(orderType === 'delivery' ? t().addrDelivery : t().addrOpt) + '<textarea id="co-address" maxlength="250">' + esc(co.address) + '</textarea></label>' +
-        '<label>' + esc(t().notesOpt) + '<input id="co-notes" maxlength="400" value="' + esc(co.notes) + '"></label>' +
-      '</form>' +
-      '<p class="co-error hidden" id="checkout-error"></p>' +
-      (sent ? '<p class="live-alert ok">' + esc(t().ready) + ' ' + esc(t().sentHint) + '</p>' : '') +
-      '<button class="co-submit" id="place-order-btn"' + (view.openNow && !view.orderingBlocked ? '' : ' disabled') + '>' + esc(t().sendSite) + '</button>' +
-      '<button class="whatsapp" id="order-wa-btn"' + (view.openNow && !view.orderingBlocked ? '' : ' disabled') + '>◌　' + esc(t().sendWA) + '</button>' +
-      '<button class="co-ghost" data-close>' + esc(t().keepBrowsing) + '</button>' +
-      '</section></div>';
-
-    root.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeOverlay));
-    root.querySelectorAll('[data-plus]').forEach((b) => b.addEventListener('click', () => changeCart(b.dataset.plus, 1)));
-    root.querySelectorAll('[data-minus]').forEach((b) => b.addEventListener('click', () => changeCart(b.dataset.minus, -1)));
-    root.querySelectorAll('.co-type button').forEach((b) => b.addEventListener('click', () => {
-      stashCo();
-      orderType = b.dataset.type;
-      try { localStorage.setItem('ordertype_' + slug, orderType); } catch (_) {}
-      renderOverlay();
-    }));
-    document.getElementById('place-order-btn').addEventListener('click', submitOrder);
-    document.getElementById('order-wa-btn').addEventListener('click', orderViaWhatsapp);
-    focusModal(root);
-  }
-
-  function closeOverlay() {
-    cartOpen = false;
-    bookingOpen = false;
-    renderOverlay();
-    const bar = $bar();
-    if (bar && !bar.classList.contains('hidden')) {
-      try { bar.focus({ preventScroll: true }); } catch (_) { /* older browsers */ }
-    }
-  }
-
-  function focusModal(root) {
-    const modal = root.querySelector('.cart-modal');
-    if (!modal) return;
-    modal.setAttribute('tabindex', '-1');
-    try { modal.focus({ preventScroll: true }); } catch (_) { /* older browsers */ }
-  }
-
-  function changeCart(key, delta) {
-    stashCo();
-    const cur = cart[key];
-    const curQty = Number.isInteger(cur) ? cur : ((cur && cur.qty) || 0);
-    const next = Math.max(0, curQty + delta);
-    if (next) {
-      cart[key] = (Number.isInteger(cur) || cur === undefined)
-        ? next
-        : { qty: next, selections: cur.selections };
-    } else delete cart[key];
+    state.checkoutOpen = false;
     saveCart();
-    renderBar();
-    updateGrids();
-    if (cartOpen || bookingOpen) renderOverlay();
+    renderCart();
+    toastMsg(getCopy('cartAdded'));
+  }
+  function cartCount() {
+    return state.cart.reduce(function (sum, line) { return sum + line.quantity; }, 0);
+  }
+  function cartSubtotalCents() {
+    return state.cart.reduce(function (sum, line) {
+      var dish = getDish(line.dishId);
+      return dish ? sum + selectedTotalCents(dish, line.selections) * line.quantity : sum;
+    }, 0);
+  }
+  function deliveryFeeCents() {
+    if (state.fulfillment !== 'delivery') return 0;
+    if (cartCount() === 0) return 0;
+    return Number(view && view.settings && view.settings.deliveryFeeCents) || 0;
+  }
+  function orderingBlocked() {
+    return !!(view && view.orderingBlocked);
   }
 
-  /* --------------------- product option picks ---------------------- */
-  // Pending picks live only in the card (server re-validates everything).
-  // picks[itemId][groupId] = {choiceId: qty}.
-  function pickState(itemId) {
-    return picks[itemId] || (picks[itemId] = {});
+  /* -------------------------------- cart --------------------------- */
+  function lineOptionText(dish, selections) {
+    return getSelectedChoices(dish, selections).map(function (entry) {
+      return localize(entry.choice.label);
+    }).join(' · ');
   }
-  function pickPrice(item, group, choice) {
-    return group.pricing === 'replace'
-      ? esc(money(choice.price_cents))
-      : '+' + esc(money(choice.price_cents));
+  function cartLinesMarkup() {
+    return state.cart.map(function (line) {
+      var dish = getDish(line.dishId);
+      if (!dish) return '';
+      var name = localize(dish.name);
+      var options = lineOptionText(dish, line.selections);
+      var unitPrice = selectedTotalCents(dish, line.selections);
+      return '<div class="cart-line"><div class="cart-line-main"><div class="cart-line-heading">' +
+        '<p class="cart-line-name">' + escapeHTML(name) + '</p>' +
+        '<strong class="line-price">' + escapeHTML(money(unitPrice * line.quantity)) + '</strong></div>' +
+        (options ? '<p class="cart-line-options">' + escapeHTML(options) + '</p>' : '') +
+        '<div class="quantity-control">' +
+        '<button type="button" data-cart-delta="-1" data-line="' + escapeHTML(line.key) + '"' +
+        ' aria-label="' + escapeHTML(getCopy('decrease')) + '">−</button>' +
+        '<span aria-live="polite">' + line.quantity + '</span>' +
+        '<button type="button" data-cart-delta="1" data-line="' + escapeHTML(line.key) + '"' +
+        ' aria-label="' + escapeHTML(getCopy('increase')) + '">+</button>' +
+        '<button class="remove-line" type="button" data-remove-line="' + escapeHTML(line.key) + '">' +
+        escapeHTML(getCopy('remove')) + '</button></div></div></div>';
+    }).join('');
   }
-  function pickerHtml(item) {
-    return '<div class="opt-groups">' + (item.options || []).map((g) => {
-      const single = g.max_picks === 1;
-      const pm = pickState(item.id)[g.id] || {};
-      const head = '<div class="opt-head"><strong>' + esc(g.name) + '</strong>' +
-        (g.min_picks > 0 ? ' <span class="opt-req">' + esc(t().optRequired) + '</span>' : '') + '</div>';
-      const body = single
-        ? '<div class="opt-opts">' + (g.choices || []).map((c) =>
-          '<button type="button" class="opt-pick' + (pm[c.id] ? ' active' : '') + '" data-opt="' +
-          esc(item.id + '|' + g.id + '|' + c.id) + '"' + (c.is_available ? '' : ' disabled') + '>' +
-          esc(c.name) + ' <span>' + pickPrice(item, g, c) + '</span></button>').join('') + '</div>'
-        : '<div class="opt-opts">' + (g.choices || []).map((c) =>
-          '<div class="opt-row"><span>' + esc(c.name) + ' <span>' + pickPrice(item, g, c) + '</span></span>' +
-          '<div class="qty"><button type="button" data-optminus="' + esc(item.id + '|' + g.id + '|' + c.id) + '">−</button>' +
-          '<span>' + (pm[c.id] || 0) + '</span>' +
-          '<button type="button" data-optplus="' + esc(item.id + '|' + g.id + '|' + c.id) + '"' +
-          (c.is_available ? '' : ' disabled') + '>＋</button></div></div>').join('') + '</div>';
-      return '<div class="opt-group">' + head + body + '</div>';
-    }).join('') + '</div>' +
-    '<p class="opt-error hidden" id="opterr-' + esc(item.id) + '">' + esc(t().optNeedMore) + '</p>';
+  function checkoutFormMarkup() {
+    if (!state.checkoutOpen) return '';
+    var delivery = state.fulfillment === 'delivery';
+    return '<div class="co-form">' +
+      '<label class="co-field"><span>' + escapeHTML(getCopy('liveName')) + '</span>' +
+      '<input id="coName" name="customerName" autocomplete="name" maxlength="80" /></label>' +
+      '<label class="co-field"><span>' + escapeHTML(getCopy('liveWhatsapp')) + '</span>' +
+      '<input id="coWhatsapp" name="customerWhatsapp" type="tel" autocomplete="tel" maxlength="20" dir="ltr" /></label>' +
+      (delivery
+        ? '<label class="co-field"><span>' + escapeHTML(getCopy('liveAddress')) + '</span>' +
+          '<input id="coAddress" name="customerAddress" autocomplete="street-address" maxlength="200" /></label>'
+        : '') +
+      '<label class="co-field"><span>' + escapeHTML(getCopy('liveNotes')) + '</span>' +
+      '<input id="coNotes" name="notes" maxlength="400" /></label>' +
+      '<p class="co-error" id="coError" hidden></p></div>';
   }
-  function refreshPicks() { updateGrids(); if (sheetItem) renderSheet(); }
-  function wirePicks(zone) {
-    zone.querySelectorAll('[data-opt]').forEach((b) => b.addEventListener('click', () => {
-      const [itemId, groupId, choiceId] = b.dataset.opt.split('|');
-      const pm = pickState(itemId);
-      if (pm[groupId] && pm[groupId][choiceId]) delete pm[groupId];
-      else pm[groupId] = { [choiceId]: 1 };
-      refreshPicks();
-    }));
-    zone.querySelectorAll('[data-optplus]').forEach((b) => b.addEventListener('click', () => {
-      const [itemId, groupId, choiceId] = b.dataset.optplus.split('|');
-      const item = view.items.find((i) => i.id === itemId);
-      const g = (item.options || []).find((x) => x.id === groupId);
-      const c = ((g && g.choices) || []).find((x) => x.id === choiceId);
-      if (!c || !c.is_available) return;
-      const pm = pickState(itemId);
-      const cur = pm[groupId] || (pm[groupId] = {});
-      const distinct = Object.keys(cur).length;
-      if (!cur[choiceId] && distinct >= g.max_picks) return;
-      cur[choiceId] = Math.min((cur[choiceId] || 0) + 1, c.max_quantity);
-      refreshPicks();
-    }));
-    zone.querySelectorAll('[data-optminus]').forEach((b) => b.addEventListener('click', () => {
-      const [itemId, groupId, choiceId] = b.dataset.optminus.split('|');
-      const pm = pickState(itemId);
-      const cur = pm[groupId] || {};
-      if (!cur[choiceId]) return;
-      cur[choiceId] -= 1;
-      if (cur[choiceId] <= 0) delete cur[choiceId];
-      if (Object.keys(cur).length === 0) delete pm[groupId];
-      refreshPicks();
-    }));
-  }
-  function picksValid(item) {
-    const pm = pickState(item.id);
-    return (item.options || []).every((g) => Object.keys(pm[g.id] || {}).length >= g.min_picks);
-  }
-  function addWithPicks(itemId) {
-    const item = view.items.find((i) => i.id === itemId);
-    if (!item || !item.is_available) return;
-    const err = document.getElementById('opterr-' + itemId);
-    if (!picksValid(item)) {
-      if (err) err.classList.remove('hidden');
-      return;
+  function cartMarkup() {
+    // Order-confirmation state keeps the same panel so the design never shifts.
+    if (state.placedOrder) {
+      var code = state.placedOrder.code || '';
+      return '<div class="cart-head"><div><p class="section-kicker">' + escapeHTML(getCopy('order')) + '</p>' +
+        '<h2 class="cart-title">' + escapeHTML(getCopy('liveOrderSent')) + '</h2></div></div>' +
+        '<div class="cart-empty"><strong class="co-code">' + escapeHTML(code) + '</strong>' +
+        '<p>' + escapeHTML(getCopy('liveShowCode')) + '</p></div>' +
+        '<div class="totals"><a class="checkout-demo" style="text-decoration:none"' +
+        ' href="/track?code=' + encodeURIComponent(code) + '"><span>' + escapeHTML(getCopy('liveTrack')) + '</span>' +
+        '<span>' + escapeHTML(code) + '</span></a>' +
+        '<button class="checkout-demo co-ghost-btn" type="button" data-new-order>' +
+        '<span>' + escapeHTML(getCopy('liveDone')) + '</span><span></span></button></div>';
     }
-    if (err) err.classList.add('hidden');
-    const pm = pickState(itemId);
-    const selections = Object.entries(pm).map(([groupId, choices]) => ({
-      groupId,
-      choices: Object.entries(choices).map(([choiceId, quantity]) => ({ choiceId, quantity })),
-    }));
-    const key = itemId + '#' + selections
-      .map((s) => s.groupId + ':' + s.choices.map((c) => c.choiceId + 'x' + c.quantity).join(',')).join(';');
-    const cur = cart[key];
-    cart[key] = { qty: ((cur && cur.qty) || 0) + 1, selections };
-    delete picks[itemId];
-    stashCo();
-    saveCart();
-    renderBar();
-    updateGrids();
-    if (cartOpen || bookingOpen) renderOverlay();
+    var count = cartCount();
+    var subtotal = cartSubtotalCents();
+    var fee = deliveryFeeCents();
+    var isEmpty = count === 0;
+    var blocked = orderingBlocked();
+    var footnote = blocked ? getCopy('liveBlocked') : getCopy('tableService');
+    return '<div class="cart-head"><div><p class="section-kicker">' + escapeHTML(getCopy('order')) + '</p>' +
+      '<h2 class="cart-title">' + escapeHTML(getCopy('yourOrder')) + '</h2></div>' +
+      '<span class="cart-count">' + count + '</span></div>' +
+      '<div class="fulfillment" role="group" aria-label="' + escapeHTML(getCopy('yourOrder')) + '">' +
+      '<button type="button" data-fulfillment="pickup"' +
+      ' class="' + (state.fulfillment === 'pickup' ? 'selected' : '') + '"' +
+      ' aria-pressed="' + (state.fulfillment === 'pickup') + '">' + escapeHTML(getCopy('pickup')) + '</button>' +
+      '<button type="button" data-fulfillment="delivery"' +
+      ' class="' + (state.fulfillment === 'delivery' ? 'selected' : '') + '"' +
+      ' aria-pressed="' + (state.fulfillment === 'delivery') + '">' + escapeHTML(getCopy('delivery')) + '</button></div>' +
+      (isEmpty
+        ? '<div class="cart-empty"><span class="empty-illustration" aria-hidden="true">' +
+          '<svg viewBox="0 0 24 24"><path d="M5 8h14l-1.2 12H6.2L5 8Zm4 0V6a3 3 0 0 1 6 0v2" /></svg></span>' +
+          '<strong>' + escapeHTML(getCopy('emptyTitle')) + '</strong><p>' + escapeHTML(getCopy('emptyText')) + '</p></div>'
+        : '<div class="cart-lines">' + cartLinesMarkup() + '</div>' +
+          '<div class="totals"><div class="total-row"><span>' + escapeHTML(getCopy('subtotal')) + '</span>' +
+          '<strong>' + escapeHTML(money(subtotal)) + '</strong></div>' +
+          (state.fulfillment === 'delivery'
+            ? '<div class="total-row"><span>' + escapeHTML(getCopy('deliveryFee')) + '</span>' +
+              '<strong>' + escapeHTML(fee ? money(fee) : getCopy('free')) + '</strong></div>'
+            : '') +
+          '<div class="total-row grand"><span>' + escapeHTML(getCopy('total')) + '</span>' +
+          '<strong>' + escapeHTML(money(subtotal + fee)) + '</strong></div>' +
+          checkoutFormMarkup() +
+          '<button class="checkout-demo" type="button" data-live-checkout' +
+          (blocked || state.placing ? ' disabled' : '') + '>' +
+          '<span>' + escapeHTML(state.placing ? getCopy('liveSending') : (state.checkoutOpen ? getCopy('livePlaceOrder') : getCopy('continueCheckout'))) + '</span>' +
+          '<span>' + escapeHTML(money(subtotal + fee)) + '</span></button></div>') +
+      '<p class="prototype-footnote">' + escapeHTML(footnote) + '</p>';
   }
-  // Human-readable selection names for cart rows and messages.
-  function selNames(item, sels) {
-    const groups = {};
-    for (const g of (item.options || [])) groups[g.id] = g;
-    const parts = [];
-    for (const s of (sels || [])) {
-      const g = groups[s.groupId];
-      if (!g) continue;
-      for (const line of (s.choices || [])) {
-        const c = (g.choices || []).find((x) => x.id === line.choiceId);
-        if (c) parts.push(c.name + (line.quantity > 1 ? ' ×' + line.quantity : ''));
-      }
+  function renderCart() {
+    var panel = $('#desktopCart');
+    if (panel) panel.innerHTML = cartMarkup();
+    var headerCount = $('#headerCartCount');
+    if (headerCount) headerCount.textContent = String(cartCount());
+    var mobileBar = $('#mobileCartBar');
+    if (mobileBar) {
+      mobileBar.hidden = cartCount() === 0;
+      mobileBar.setAttribute('aria-expanded', String(state.cartOpen));
+      var mc = $('.mobile-cart-count');
+      if (mc) mc.textContent = String(cartCount());
+      var mt = $('.mobile-cart-total');
+      if (mt) mt.textContent = money(cartSubtotalCents() + deliveryFeeCents());
     }
-    return parts.join(', ');
+    renderCartDrawer();
   }
-
-  /* ---------------------------- checkout --------------------------- */
-  function readCo() {
-    return {
-      customerName: document.getElementById('co-name').value.trim(),
-      customerWhatsapp: document.getElementById('co-wa').value.trim(),
-      customerPhone: document.getElementById('co-phone').value.trim(),
-      customerAddress: document.getElementById('co-address').value.trim(),
-      notes: document.getElementById('co-notes').value.trim(),
-    };
+  function renderCartDrawer() {
+    var root = $('#cartDrawerRoot');
+    if (!root) return;
+    if (!state.cartOpen) { root.innerHTML = ''; return; }
+    root.innerHTML = '<div class="cart-drawer" data-close-cart><aside class="cart-drawer-inner" role="dialog"' +
+      ' aria-modal="true" aria-labelledby="drawerTitle" tabindex="-1"><div class="drawer-heading">' +
+      '<h2 id="drawerTitle">' + escapeHTML(getCopy('yourOrder')) + '</h2>' +
+      '<button type="button" data-close-cart aria-label="' + escapeHTML(getCopy('closeOrder')) + '">' +
+      '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" /></svg></button></div>' +
+      '<div class="drawer-content">' + cartMarkup() + '</div></aside></div>';
+    document.body.classList.add('overlay-open');
   }
-  function coError(msg) {
-    const box = document.getElementById('checkout-error');
-    if (!box) return;
-    if (!msg) { box.classList.add('hidden'); return; }
-    box.textContent = msg;
-    box.classList.remove('hidden');
-  }
-
-  // One idempotency key per checkout attempt: retries after a failure reuse it,
-  // so a double-click or slow-network retry returns the original order (FR-008b).
-  // A fresh key is minted for every new attempt (a new success clears it).
-  let submitKey = null;
-
-  async function submitOrder() {
-    coError(null);
-    const f = readCo();
-    if (!f.customerName || !f.customerWhatsapp) { coError(t().enterNameAndWa); return; }
-    if (orderType === 'delivery' && !f.customerAddress) { coError(t().addrRequired); return; }
-    const btn = document.getElementById('place-order-btn');
-    btn.disabled = true;
-    if (!submitKey && window.crypto && typeof window.crypto.randomUUID === 'function') {
-      submitKey = window.crypto.randomUUID();
-    }
-    try {
-      const data = await api.post('/api/restaurants/' + encodeURIComponent(slug) + '/orders', {
-        customerName: f.customerName, customerWhatsapp: f.customerWhatsapp,
-        customerPhone: f.customerPhone, customerAddress: f.customerAddress,
-        notes: f.notes, orderType, submissionKey: submitKey,
-        items: cartEntries().map((e) => ({ itemId: e.item.id, quantity: e.qty, selections: e.selections })),
-      });
-      cart = {}; co = { name: '', wa: '', phone: '', address: '', notes: '' };
-      submitKey = null;
-      saveCart(); renderBar(); updateGrids();
-      renderSuccess(data.order);
-    } catch (err) {
-      coError(err.message);
-    } finally {
-      btn.disabled = false;
-    }
-  }
-
-  function orderViaWhatsapp() {
-    const f = readCo();
-    coError(null);
-    if (!f.customerName || !f.customerWhatsapp) { coError(t().enterNameAndWa); return; }
-    if (orderType === 'delivery' && !f.customerAddress) { coError(t().addrRequired); return; }
-    const restaurantWa = ((view.settings && view.settings.whatsapp) || '').replace(/[^0-9]/g, '');
-    if (!restaurantWa) { coError(t().noWA); return; }
-    const entries = cartEntries();
-    const lines = entries.map((e) => {
-      const names = selNames(e.item, e.selections);
-      return e.qty + '× ' + e.item.name + (names ? ' (' + names + ')' : '');
-    }).join('\n');
-    let msg = 'السلام عليكم ' + view.name + '، أريد طلب:\n' + lines +
-      '\n' + t().total + ': ' + money(subtotalCents() + feeCents()) +
-      '\n' + t().yourName + ': ' + f.customerName + '\n' + t().waNumber + ': ' + f.customerWhatsapp;
-    if (f.customerAddress) msg += '\n' + t().addrDelivery + ': ' + f.customerAddress;
-    if (f.notes) msg += '\n' + t().notesOpt + ': ' + f.notes;
-    msg += '\n' + (orderType === 'delivery' ? t().delivery : t().pickup);
-    sent = true;
-    window.open('https://wa.me/' + encodeURIComponent(restaurantWa) + '?text=' + encodeURIComponent(msg), '_blank');
-    renderOverlay();
-  }
-
-  function renderSuccess(order) {
-    const code = order.code || '';
-    paintSuccess(order, null);
-    // Enrich with the frozen server projection (lines, options, preorder
-    // notes, currency). Failure keeps the minimal confirmation above.
-    api.get('/api/orders/track/' + encodeURIComponent(code)).then(
-      (d) => { if (d && d.order) paintSuccess(order, d.order); },
-      () => {}
-    );
-  }
-
-  function paintSuccess(order, full) {
-    const code = order.code || '';
-    const currency = (full && full.currency) || order.currency || (view.settings && view.settings.currency) || 'USD';
-    const sub = full ? full.subtotal_cents : order.subtotalCents;
-    const fee = full ? full.delivery_fee_cents : order.deliveryFeeCents;
-    const total = full ? full.total_cents : (order.total_cents ?? order.totalCents ?? 0);
-    const type = full ? full.order_type : orderType;
-    const when = full ? full.created_at : order.createdAt;
-    const lines = full
-      ? full.items.map((it) =>
-        '<div class="total-row"><span>' + esc(it.quantity) + ' &times; ' + esc(it.item_name) +
-        (((it.options || []).length)
-          ? '<br><small>' + esc(it.options.map((o) => o.choice_name + (o.quantity > 1 ? ' ×' + o.quantity : '')).join(', ')) + '</small>'
-          : '') +
-        (it.is_preorder
-          ? '<br><small>' + esc(t().preorderBadge) + (it.preorder_note ? ': ' + esc(it.preorder_note) : '') + '</small>'
-          : '') +
-        '</span><span>' + esc(fmtMoney(it.line_total_cents, currency)) + '</span></div>'
-      ).join('')
-      : '';
-    let whenLine = '';
-    try {
-      if (when) whenLine = '<p class="muted small mb-0">' + esc(new Date(when).toLocaleString(lang === 'ar' ? 'ar' : 'en')) + '</p>';
-    } catch (_) { /* cosmetic only */ }
-    $overlay().innerHTML = '<div class="cart-overlay"><section class="cart-modal">' +
-      '<div class="cart-title"><div><h2>' + esc(t().placedHead) + '</h2></div>' +
-      '<button class="cart-close" data-close>×</button></div>' +
-      '<p style="color:rgba(32,61,58,.65);font-size:13px">' + esc(t().showCode) + '</p>' +
-      '<div class="success-code">' + esc(code) + '</div>' + whenLine +
-      '<p><span class="badge">' + esc(type === 'delivery' ? t().delivery : t().pickup) + '</span>' +
-      (full && full.items.some((it) => it.is_preorder) ? ' <span class="preorder-tag">' + esc(t().preorderBadge) + '</span>' : '') + '</p>' +
-      (lines ? '<h3 class="section-title">' + esc(t().orderSummary) + '</h3>' + lines : '') +
-      (full && type === 'delivery'
-        ? '<div class="total-row"><span>' + esc(t().deliveryFee) + '</span><span>' + esc(fmtMoney(full.delivery_fee_cents, currency)) + '</span></div>'
-        : (sub !== undefined && fee !== undefined && type === 'delivery'
-          ? '<div class="total-row"><span>' + esc(t().deliveryFee) + '</span><span>' + esc(fmtMoney(fee, currency)) + '</span></div>'
-          : '')) +
-      '<p class="success-total">' + esc(t().total) + ' <strong>' + esc(fmtMoney(total, currency)) + '</strong></p>' +
-      '<p style="color:rgba(32,61,58,.65);font-size:13px">' + esc(t().nextSteps) + '</p>' +
-      '<a class="co-submit" style="text-decoration:none" href="/track?code=' + encodeURIComponent(code) + '">' + esc(t().trackMyOrder) + '</a>' +
-      '<button class="co-ghost" data-close>' + esc(t().done) + '</button></section></div>';
-    $overlay().querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => { sent = false; closeOverlay(); }));
-    focusModal($overlay());
-  }
-
-  /* ---------------------------- booking ---------------------------- */
-  function bookingHtml() {
-    const today = new Date().toISOString().slice(0, 10);
-    return '<div class="cart-overlay"><section class="cart-modal">' +
-      '<div class="cart-title"><div><h2>' + esc(t().bookTitle) + '</h2></div>' +
-      '<button class="cart-close" data-close>×</button></div>' +
-      '<p style="color:rgba(32,61,58,.65);font-size:13px">' + esc(t().bookDesc) + '</p>' +
-      '<form id="booking-form" class="co-form" novalidate>' +
-        '<label>' + esc(t().bkName) + '<input id="bk-name" maxlength="80"></label>' +
-        '<label>' + esc(t().bkWA) + '<input id="bk-wa" type="tel" maxlength="20" dir="ltr"></label>' +
-        '<label>' + esc(t().bkPhone) + '<input id="bk-phone" type="tel" maxlength="20" dir="ltr"></label>' +
-        '<label>' + esc(t().bkTables) + '<input id="bk-tables" type="number" min="1" max="20" value="2"></label>' +
-        '<label>' + esc(t().bkDate) + '<input id="bk-date" type="date" value="' + esc(today) + '"></label>' +
-        '<label>' + esc(t().bkTime) + '<input id="bk-time" type="time" value="19:00"></label>' +
-        '<label>' + esc(t().bkNotes) + '<input id="bk-notes" maxlength="400"></label>' +
-      '</form><p class="co-error hidden" id="booking-error"></p>' +
-      '<button class="co-submit" id="book-submit-btn">' + esc(t().bookNow) + '</button>' +
-      '<button class="co-ghost" data-close>' + esc(t().close) + '</button></section></div>';
-  }
-  function wireBooking() {
-    $overlay().querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeOverlay));
-    document.getElementById('book-submit-btn').addEventListener('click', async () => {
-      const errBox = document.getElementById('booking-error');
-      errBox.classList.add('hidden');
-      const btn = document.getElementById('book-submit-btn');
-      btn.disabled = true;
-      try {
-        await api.post('/api/restaurants/' + encodeURIComponent(slug) + '/bookings', {
-          customerName: document.getElementById('bk-name').value,
-          customerWhatsapp: document.getElementById('bk-wa').value,
-          customerPhone: document.getElementById('bk-phone').value,
-          tablesCount: Number(document.getElementById('bk-tables').value),
-          bookedAt: document.getElementById('bk-date').value + 'T' + document.getElementById('bk-time').value,
-          notes: document.getElementById('bk-notes').value,
-        });
-        toast(t().bookingCreated, 'success');
-        closeOverlay();
-      } catch (err) {
-        errBox.textContent = err.message;
-        errBox.classList.remove('hidden');
-        btn.disabled = false;
-      }
+  function openCart() {
+    closeDish();
+    state.previousFocus = document.activeElement;
+    state.cartOpen = true;
+    renderCartDrawer();
+    requestAnimationFrame(function () {
+      var btn = $("#cartDrawerRoot [role='dialog'] .drawer-heading button");
+      if (btn) btn.focus();
     });
   }
-
-  /* ----------------------------- share ----------------------------- */
-  function sharePage() {
-    const url = location.href;
-    if (navigator.share) { navigator.share({ title: view.name, text: view.name, url }).catch(() => {}); }
-    else if (navigator.clipboard) { navigator.clipboard.writeText(url).then(() => toast(t().linkCopied)); }
+  function closeCart() {
+    if (!state.cartOpen) return;
+    state.cartOpen = false;
+    var root = $('#cartDrawerRoot');
+    if (root) root.innerHTML = '';
+    if (!state.modalDishId) document.body.classList.remove('overlay-open');
+    if (state.previousFocus && state.previousFocus.focus) {
+      try { state.previousFocus.focus(); } catch (_) { /* ignore */ }
+    }
+  }
+  function changeCartLine(key, delta) {
+    var line = null;
+    state.cart.forEach(function (item) { if (item.key === key) line = item; });
+    if (!line) return;
+    line.quantity += delta;
+    if (line.quantity <= 0) {
+      state.cart = state.cart.filter(function (item) { return item.key !== key; });
+    } else {
+      line.quantity = Math.min(99, line.quantity);
+    }
+    saveCart();
+    renderCart();
+  }
+  function toastMsg(message) {
+    if (App.toast) {
+      try { App.toast(message); return; } catch (_) { /* fall through */ }
+    }
+    var zone = $('#toastZone');
+    if (!zone) return;
+    zone.innerHTML = '';
+    var element = document.createElement('div');
+    element.className = 'demo-toast';
+    element.textContent = message;
+    zone.append(element);
+    window.clearTimeout(state.toastTimer);
+    state.toastTimer = window.setTimeout(function () { element.remove(); }, 2600);
   }
 
-  /* ------------------------------ boot ----------------------------- */
-  async function boot() {
-    document.documentElement.lang = lang;
-    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  /* ------------------------------ checkout ------------------------- */
+  function cartKey() { return 'ordora_cart_' + slug; }
+  function saveCart() {
+    try { localStorage.setItem(cartKey(), JSON.stringify(state.cart)); } catch (_) { /* ignore */ }
+  }
+  function loadCart() {
     try {
-      view = await api.get('/api/restaurants/' + encodeURIComponent(slug) + '/menu');
-    } catch (err) {
-      $content().innerHTML = '<div class="live-alert error">' + esc(err.message) + '</div>';
-      $bar().classList.add('hidden');
-      return;
-    }
-    try {
-      const stored = localStorage.getItem('restivo-lang');
-      const sl = view.settings && view.settings.storefrontLanguage;
-      if (!stored && (sl === 'ar' || sl === 'en') && sl !== lang) setLang(sl);
+      var raw = JSON.parse(localStorage.getItem(cartKey()) || '[]');
+      if (!Array.isArray(raw)) return;
+      state.cart = raw.filter(function (line) {
+        return line && typeof line.key === 'string' && Number.isInteger(line.quantity) &&
+          line.quantity > 0 && line.quantity <= 99 && typeof line.dishId === 'string';
+      });
     } catch (_) { /* ignore */ }
-    const qLang = qsParam('lang');
-    if (qLang === 'en' || qLang === 'ar') setLang(qLang);
-    api.get('/api/seo/business/' + encodeURIComponent(slug)).then((m) => {
-      if (!m) return;
-      document.title = m.title;
-      (function () {
-        let el = document.head.querySelector('meta[name="description"]');
-        if (!el) { el = document.createElement('meta'); el.name = 'description'; document.head.appendChild(el); }
-        el.content = m.description;
-      })();
-      const ensureMeta = (key, value, attr) => {
-        let el = document.head.querySelector('meta[' + attr + '="' + key + '"]');
-        if (!el) { el = document.createElement('meta'); el.setAttribute(attr, key); document.head.appendChild(el); }
-        el.setAttribute('content', value);
-      };
-      ensureMeta('og:title', m.ogTitle, 'property');
-      ensureMeta('og:description', m.ogDescription, 'property');
-      ensureMeta('og:type', m.ogType, 'property');
-      ensureMeta('og:image', m.ogImage, 'property');
-      ensureMeta('og:url', m.canonical, 'property');
-      if (m.noindex) ensureMeta('robots', 'noindex, nofollow', 'name');
-      let link = document.head.querySelector('link[rel="canonical"]');
-      if (!link) { link = document.createElement('link'); link.rel = 'canonical'; document.head.appendChild(link); }
-      link.href = m.canonical;
-      const alt = (hl) => {
-        let a = document.head.querySelector('link[rel="alternate"][hreflang="' + hl + '"]');
-        if (!a) { a = document.createElement('link'); a.rel = 'alternate'; a.setAttribute('hreflang', hl); document.head.appendChild(a); }
-        a.href = m.canonical + (m.canonical.includes('?') ? '&' : '?') + 'lang=' + (hl === 'x-default' ? 'ar' : hl);
-      };
-      alt('ar'); alt('en'); alt('x-default');
-      const ld = document.createElement('script');
-      ld.type = 'application/ld+json';
-      ld.textContent = JSON.stringify(m.structuredData);
-      document.head.appendChild(ld);
-    }).catch(() => {});
-    try {
-      const tokens = theme.buildTokens(view.settings.primaryColor, view.settings.secondaryColor);
-      const rs = document.documentElement.style;
-      for (const [name, value] of Object.entries(tokens)) rs.setProperty(name, value);
-    } catch (_) { /* brand tokens optional */ }
-    document.title = (lang === 'en' && view.settings.nameEn) ? view.settings.nameEn : view.name;
-
-    const reorderRaw = qsParam('reorder');
-    const reorderFrom = qsParam('reorderFrom');
-    if (reorderRaw || reorderFrom) {
-      // Rebuilds from LIVE definitions: unknown/unavailable items and
-      // renamed/removed/unavailable options are dropped with notice —
-      // stale prices are never reapplied (server reprices at checkout).
-      const apply = (lines) => {
-        let dropped = 0;
-        for (const line of lines) {
-          const id = String(line.id).trim();
-          const qty = Math.max(1, Math.min(Number(line.qty), 99) || 1);
-          const item = view.items.find((i) => i.id === id);
-          if (!item || !item.is_available) { dropped += 1; continue; }
-          const opts = line.options || [];
-          if (!opts.length && !(item.options || []).length) { cart[id] = qty; continue; }
-          const selections = [];
-          let ok = true;
-          for (const g of (item.options || [])) {
-            const want = opts.filter((o) =>
-              (o.group_name || '').toLowerCase() === g.name.toLowerCase());
-            const choices = [];
-            for (const w of want) {
-              const c = (g.choices || []).find((x) =>
-                x.is_available && x.name.toLowerCase() === (w.choice_name || '').toLowerCase());
-              if (!c) continue;
-              if (choices.length >= g.max_picks) break;
-              choices.push({ choiceId: c.id, quantity: Math.max(1, Math.min(Number(w.quantity) || 1, c.max_quantity || 99)) });
-            }
-            if (choices.length < g.min_picks) { ok = false; break; }
-            if (choices.length) selections.push({ groupId: g.id, choices });
-          }
-          if (!ok) { dropped += 1; continue; }
-          const key = id + '#' + selections
-            .map((s) => s.groupId + ':' + s.choices.map((c) => c.choiceId + 'x' + c.quantity).join(',')).join(';');
-          cart[key] = { qty, selections };
-        }
-        return dropped;
-      };
-      try {
-        let dropped = 0;
-        if (reorderFrom && /^[A-Za-z0-9]{6,12}$/.test(reorderFrom)) {
-          try {
-            const d = await api.get('/api/orders/track/' + encodeURIComponent(reorderFrom.toUpperCase()));
-            dropped = apply((d.order.items || []).map((it) => ({
-              id: it.menu_item_id, qty: it.quantity, options: it.options || [],
-            })));
-          } catch (_) {
-            dropped = apply((reorderRaw || '').split(',').filter(Boolean).map((p) => {
-              const [id, q] = p.split(':');
-              return { id, qty: q, options: [] };
-            }));
-          }
-        } else if (reorderRaw) {
-          dropped = apply(reorderRaw.split(',').map((p) => {
-            const [id, q] = p.split(':');
-            return { id, qty: q, options: [] };
-          }));
-        }
-        saveCart();
-        if (dropped) toast(t().reorderAdjusted, 'error');
-      } catch (_) { /* ignore malformed reorder param */ }
+  }
+  function coError(message) {
+    $$('#desktopCart #coError, #cartDrawerRoot #coError').forEach(function (box) {
+      if (!message) { box.hidden = true; return; }
+      box.textContent = message;
+      box.hidden = false;
+    });
+  }
+  function submitKey() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+    return 'key-' + Date.now() + '-' + Math.floor(Math.random() * 1e9);
+  }
+  function handleCheckout() {
+    if (orderingBlocked() || state.placing || cartCount() === 0) return;
+    if (!state.checkoutOpen) {
+      state.checkoutOpen = true;
+      renderCart();
+      var input = $('#cartDrawerRoot #coName') || $('#desktopCart #coName');
+      if (input) input.focus();
+      return;
     }
-
-    renderAll();
-    $bar().addEventListener('click', () => { if (totalUnits() === 0) return; bookingOpen = false; cartOpen = true; renderOverlay(); });
-    $overlay().addEventListener('click', (e) => { if (e.target.classList.contains('cart-overlay')) closeOverlay(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOverlay(); });
+    var root = state.cartOpen ? $('#cartDrawerRoot') : $('#desktopCart');
+    var name = root ? root.querySelector('#coName') : null;
+    var wa = root ? root.querySelector('#coWhatsapp') : null;
+    var address = root ? root.querySelector('#coAddress') : null;
+    var notes = root ? root.querySelector('#coNotes') : null;
+    var customerName = name ? name.value.trim() : '';
+    var customerWhatsapp = wa ? wa.value.trim() : '';
+    var customerAddress = address ? address.value.trim() : '';
+    if (!customerName || !customerWhatsapp) { coError(getCopy('liveEnterNameAndWa')); return; }
+    if (state.fulfillment === 'delivery' && !customerAddress) { coError(getCopy('liveAddrRequired')); return; }
+    coError(null);
+    state.placing = true;
+    renderCart();
+    api.post('/api/restaurants/' + encodeURIComponent(slug) + '/orders', {
+      customerName: customerName,
+      customerWhatsapp: customerWhatsapp,
+      customerPhone: '',
+      customerAddress: customerAddress,
+      notes: notes ? notes.value.trim() : '',
+      orderType: state.fulfillment,
+      submissionKey: submitKey(),
+      items: state.cart.map(function (line) {
+        var dish = getDish(line.dishId);
+        var selections = [];
+        Object.keys(line.selections || {}).forEach(function (groupId) {
+          selections.push({
+            groupId: groupId,
+            choices: line.selections[groupId].map(function (choiceId) {
+              return { choiceId: choiceId, quantity: 1 };
+            }),
+          });
+        });
+        return { itemId: dish ? dish.id : line.dishId, quantity: line.quantity, selections: selections };
+      }),
+    }).then(function (data) {
+      state.placing = false;
+      state.checkoutOpen = false;
+      state.cart = [];
+      saveCart();
+      state.placedOrder = (data && data.order) || { code: '' };
+      renderCart();
+    }).catch(function (err) {
+      state.placing = false;
+      renderCart();
+      coError(err && err.message ? err.message : getCopy('liveLoadError'));
+    });
   }
 
-  boot();
+  /* ------------------------------- share --------------------------- */
+  function shareMenu() {
+    var name = view ? view.name : document.title;
+    var shareData = { title: name, text: name, url: window.location.href };
+    function done() { toastMsg(getCopy('linkCopied')); }
+    if (navigator.share) {
+      navigator.share(shareData).catch(function (error) {
+        if (error && error.name !== 'AbortError') toastMsg(getCopy('shareError'));
+      });
+      return;
+    }
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareData.url).then(done, function () {
+        toastMsg(getCopy('shareError'));
+      });
+      return;
+    }
+    toastMsg(getCopy('shareError'));
+  }
+
+  /* ---------------------------- static copy ------------------------ */
+  function updateStaticCopy() {
+    document.documentElement.lang = state.language;
+    document.documentElement.dir = state.language === 'ar' ? 'rtl' : 'ltr';
+    if (view) document.title = view.name;
+    $$('[data-copy]').forEach(function (element) {
+      element.textContent = getCopy(element.dataset.copy);
+    });
+    // Live overrides (after the generic pass so real data wins).
+    $('#restaurantName').textContent = view ? view.name : '…';
+    var desc = $('#restaurantName').parentElement.querySelector('.hero-description');
+    if (desc && view && view.settings && view.settings.description) desc.textContent = view.settings.description;
+    var foot = $('.footer-copyright');
+    if (foot && view) {
+      foot.textContent = state.language === 'ar'
+        ? '© 2026 ' + view.name + '. جميع الحقوق محفوظة.'
+        : '© 2026 ' + view.name + '. All rights reserved.';
+    }
+    var eyebrow = $('#restaurantName').parentElement.querySelector('.eyebrow [data-copy]');
+    if (eyebrow) {
+      var open = !view || view.openNow !== false;
+      eyebrow.textContent = open ? getCopy('openNow') : getCopy('closed');
+      eyebrow.removeAttribute('data-copy');
+    }
+    var languageButton = $('#languageButton');
+    if (languageButton) {
+      languageButton.textContent = state.language === 'ar' ? 'EN' : 'عربي';
+      languageButton.setAttribute('aria-label', state.language === 'ar' ? 'Switch to English' : 'التبديل إلى العربية');
+    }
+    var shareButton = $('#shareButton');
+    if (shareButton) shareButton.setAttribute('aria-label', getCopy('share'));
+    var openCartButton = $('#openCartButton');
+    if (openCartButton) openCartButton.setAttribute('aria-label', getCopy('order'));
+    var desktopCart = $('#desktopCart');
+    if (desktopCart) desktopCart.setAttribute('aria-label', getCopy('yourOrder'));
+    var categoryStrip = $('#categoryStrip');
+    if (categoryStrip) categoryStrip.setAttribute('aria-label', getCopy('categoryLabel'));
+    var coverCarousel = $('#coverCarousel');
+    if (coverCarousel) coverCarousel.setAttribute('aria-label', getCopy('coverLabel'));
+    var coverPrevious = $('#coverPrevious');
+    if (coverPrevious) coverPrevious.setAttribute('aria-label', getCopy('previousCover'));
+    var coverNext = $('#coverNext');
+    if (coverNext) coverNext.setAttribute('aria-label', getCopy('nextCover'));
+    $$('.cover-dot').forEach(function (dot) {
+      dot.setAttribute('aria-label', getCopy('showCover') + ' ' + (Number(dot.dataset.coverIndex) + 1));
+    });
+    $$('.cover-slide img').forEach(function (image, index) {
+      if (coverSlides[index]) image.alt = localize(coverSlides[index].alt);
+    });
+    var search = $('#menuSearch');
+    if (search) {
+      search.placeholder = getCopy('searchPlaceholder');
+      search.setAttribute('aria-label', getCopy('searchLabel'));
+      if (document.activeElement !== search) search.value = state.query;
+    }
+  }
+  function setLanguage(language) {
+    if (language === state.language) return;
+    state.language = language;
+    updateStaticCopy();
+    renderMenu();
+    renderCart();
+    if (state.modalDishId) renderModal();
+  }
+
+  /* -------------------------------- events ------------------------- */
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest('button, a');
+    if (!button) {
+      if (event.target.matches('[data-close-modal]')) closeDish();
+      if (event.target.matches('[data-close-cart]')) closeCart();
+      return;
+    }
+    if (button.id === 'languageButton') {
+      setLanguage(state.language === 'ar' ? 'en' : 'ar');
+      return;
+    }
+    if (button.id === 'shareButton') { shareMenu(); return; }
+    if (button.id === 'openCartButton' || button.id === 'mobileCartBar') { openCart(); return; }
+    if (button.dataset.category) {
+      state.category = button.dataset.category;
+      renderMenu();
+      return;
+    }
+    if (button.dataset.openDish) { openDish(button.dataset.openDish, button); return; }
+    if (button.dataset.quickAdd) {
+      var dish = getDish(button.dataset.quickAdd);
+      if (!dish) return;
+      if (dish.options.length) openDish(dish.id, button);
+      else addDishToCart(dish.id);
+      return;
+    }
+    if (button.hasAttribute('data-close-modal')) { closeDish(); return; }
+    if (button.hasAttribute('data-close-cart')) { closeCart(); return; }
+    if (button.dataset.fulfillment) {
+      state.fulfillment = button.dataset.fulfillment;
+      state.checkoutOpen = false;
+      renderCart();
+      return;
+    }
+    if (button.dataset.cartDelta) {
+      changeCartLine(button.dataset.line, Number(button.dataset.cartDelta));
+      return;
+    }
+    if (button.dataset.removeLine) {
+      state.cart = state.cart.filter(function (line) { return line.key !== button.dataset.removeLine; });
+      saveCart();
+      renderCart();
+      return;
+    }
+    if (button.dataset.modalQuantity) {
+      state.modalQuantity = Math.max(1, state.modalQuantity + Number(button.dataset.modalQuantity));
+      var qty = $('#modalQuantity');
+      if (qty) qty.textContent = String(state.modalQuantity);
+      updateModalSummary();
+      return;
+    }
+    if (button.hasAttribute('data-add-modal')) {
+      var modalDish = getDish(state.modalDishId);
+      if (!modalDish || !getModalValidity(modalDish)) return;
+      addDishToCart(modalDish.id, state.modalSelections, state.modalQuantity);
+      closeDish();
+      return;
+    }
+    if (button.hasAttribute('data-live-checkout')) { handleCheckout(); return; }
+    if (button.hasAttribute('data-new-order')) {
+      state.placedOrder = null;
+      renderCart();
+      return;
+    }
+  });
+  document.addEventListener('input', function (event) {
+    if (event.target.id !== 'menuSearch') return;
+    state.query = event.target.value;
+    renderMenu();
+  });
+  document.addEventListener('change', function (event) {
+    var input = event.target.closest('[data-option-choice]');
+    if (!input || !state.modalDishId) return;
+    var groupId = input.dataset.group;
+    var choiceId = input.dataset.choice;
+    var dish = getDish(state.modalDishId);
+    if (!dish) return;
+    var groupData = null;
+    dish.options.forEach(function (item) { if (item.id === groupId) groupData = item; });
+    if (!groupData) return;
+    if (groupData.required) {
+      state.modalSelections[groupId] = input.checked ? [choiceId] : [];
+    } else {
+      var current = state.modalSelections[groupId] || [];
+      state.modalSelections[groupId] = input.checked
+        ? current.concat([choiceId])
+        : current.filter(function (item) { return item !== choiceId; });
+    }
+    updateModalSummary();
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') { closeDish(); closeCart(); return; }
+    if (event.key !== 'Tab') return;
+    var dialog = $('#modalRoot [role=\'dialog\'], #cartDrawerRoot [role=\'dialog\']');
+    if (!dialog) return;
+    var focusable = $$('button:not(:disabled), input:not(:disabled)', dialog)
+      .filter(function (element) { return element.offsetParent !== null; });
+    if (!focusable.length) return;
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  document.addEventListener('error', function (event) {
+    var image = event.target;
+    if (!(image instanceof HTMLImageElement) || image.dataset.fallback === 'true') return;
+    if (!image.matches('.dish-photo img, .modal-image img, .cover-slide img')) return;
+    image.dataset.fallback = 'true';
+    image.src = FALLBACK_IMG;
+  }, true);
+
+  /* --------------------------------- boot -------------------------- */
+  loadCart();
+  if (!slug) {
+    $('#dishGrid').innerHTML = '<div class="no-results"><span class="no-results-mark" aria-hidden="true"></span>' +
+      '<h3>' + escapeHTML(getCopy('liveNotFound')) + '</h3></div>';
+  } else {
+    api.get('/api/restaurants/' + encodeURIComponent(slug) + '/menu').then(function (data) {
+      mapView(data);
+      updateStaticCopy();
+      initializeCoverCarousel();
+      renderMenu();
+      renderCart();
+      initializeCategoryDock();
+    }).catch(function () {
+      $('#dishGrid').innerHTML = '<div class="no-results"><span class="no-results-mark" aria-hidden="true"></span>' +
+        '<h3>' + escapeHTML(getCopy('liveLoadError')) + '</h3></div>';
+    });
+  }
+  updateStaticCopy();
+  renderMenu();
+  renderCart();
 })();

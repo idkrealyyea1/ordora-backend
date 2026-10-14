@@ -1,52 +1,142 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f5eddd">
-  <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
-  <title>المطعم</title>
-  <link rel="stylesheet" href="/fonts/fonts.css">
-  <link rel="stylesheet" href="/css/restivo.css">
-  <link rel="stylesheet" href="/css/skeleton.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
-</head>
-<body>
-  <!-- Skeleton loader: visible until page fully loads / offline handling -->
-  <div id="app-skeleton" aria-hidden="false" aria-label="Loading">
-    <div class="sk-skeleton-topbar">
-      <div class="sk-logo shimmer" aria-hidden="true"></div>
-      <div class="sk-brand shimmer"></div>
-      <div class="sk-nav" aria-hidden="true"><span class="shimmer"></span><span class="shimmer"></span><span class="shimmer"></span><span class="shimmer"></span></div>
-      <div class="sk-actions"><span class="sk-btn shimmer"></span><span class="sk-btn shimmer" style="width:110px"></span></div>
-    </div>
-    <div class="sk-hero">
-      <div class="sk-hero-left">
-        <div class="sk-pill shimmer"></div>
-        <div class="sk-h1 shimmer"></div><div class="sk-h1-2 shimmer"></div>
-        <div class="sk-p shimmer"></div><div class="sk-p-2 shimmer"></div>
-        <div class="sk-cta"><span class="shimmer"></span><span class="shimmer"></span></div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#721721" />
+    <meta name="description" content="Browse the menu in Arabic or English and build a sample order." />
+    <meta property="og:type" content="website" />
+    <title>Ordora Menu</title>
+    <link rel="icon" type="image/png" href="/demo/images/ordora-mark.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/demo/styles.css" />
+    <link rel="stylesheet" href="/demo/red-bun-theme.css" />
+    <style>
+      /* Live checkout fields only (no demo equivalent); same tokens as demo CSS. */
+      .co-form{display:grid;gap:8px;margin-top:12px}
+      .co-field{display:grid;gap:4px;font-size:10px;color:#63736b}
+      .co-field input{min-height:42px;width:100%;padding:0 12px;border:1px solid #e2d8c5;border-radius:8px;background:#fff;color:var(--ink);font:inherit}
+      .co-error{margin:0;font-size:10px;color:#b52b36}
+      .co-code{display:block;font-size:26px;letter-spacing:2px;color:var(--ink)}
+      .checkout-demo[disabled]{opacity:.55;cursor:not-allowed;transform:none}
+      .co-ghost-btn{background:transparent;color:#7b8278;text-decoration:underline;text-underline-offset:2px;min-height:36px}
+      .co-ghost-btn:hover{background:transparent;transform:none}
+    </style>
+  </head>
+  <body>
+    <div class="menu-app">
+      <header class="topbar">
+        <div class="topbar-info">
+          <span class="preview-dot" aria-hidden="true"></span>
+          <span data-copy="previewLabel">قائمة تجريبية</span>
+          <span class="topbar-divider" aria-hidden="true"></span>
+          <span data-copy="tableLabel">الطاولة 08</span>
+        </div>
+        <div class="topbar-actions">
+          <button class="text-button" id="shareButton" type="button">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13V3m0 0L6.5 6.5M10 3l3.5 3.5M4 10.5v4A2.5 2.5 0 0 0 6.5 17h7a2.5 2.5 0 0 0 2.5-2.5v-4" /></svg>
+            <span data-copy="share">مشاركة</span>
+          </button>
+          <button class="language-button" id="languageButton" type="button" aria-label="Switch to English">EN</button>
+        </div>
+      </header>
+
+      <div class="brandbar">
+        <a class="brand-mark" href="/" aria-label="Ordora home">
+          <img class="brand-lockup" src="/demo/images/ordora-lockup.png" alt="Ordora — Your Food, Online" />
+        </a>
+        <div class="brandbar-actions">
+          <span class="brandbar-note">
+            <span class="brandbar-mark" aria-hidden="true"></span>
+            <span data-copy="brandNote">أطيب لحظات المائدة</span>
+          </span>
+          <button class="header-cart" id="openCartButton" type="button" aria-label="Open your order">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6.5h12l-1 10H5l-1-10ZM7 7V5a3 3 0 0 1 6 0v2" /></svg>
+            <span data-copy="order">طلبك</span>
+            <span class="header-cart-count" id="headerCartCount" aria-live="polite">0</span>
+          </button>
+        </div>
       </div>
-      <div class="sk-visual shimmer"><div class="sk-phone shimmer"></div><div class="sk-card shimmer"></div><div class="sk-card shimmer"></div><div class="sk-card shimmer"></div></div>
+
+      <main>
+        <section class="restaurant-hero" aria-labelledby="restaurantName">
+          <div class="restaurant-cover" id="coverCarousel" role="region" aria-roledescription="carousel" aria-label="صور المطعم">
+            <div class="cover-track" id="coverTrack">
+              <div class="cover-slide is-active" aria-hidden="false">
+                <img src="/demo/images/red-bun-campaign-1.jpg" alt="" fetchpriority="high" />
+              </div>
+            </div>
+            <div class="cover-shade" aria-hidden="true"></div>
+            <button class="cover-control cover-previous" id="coverPrevious" type="button" data-cover-step="-1" aria-label="الصورة السابقة" aria-controls="coverTrack">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12.5 4.5-5.5 5.5 5.5 5.5" /></svg>
+            </button>
+            <button class="cover-control cover-next" id="coverNext" type="button" data-cover-step="1" aria-label="الصورة التالية" aria-controls="coverTrack">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 4.5 5.5 5.5-5.5 5.5" /></svg>
+            </button>
+            <div class="cover-pagination" id="coverPagination" role="group" aria-label="صور الغلاف"></div>
+          </div>
+          <div class="restaurant-profile">
+            <a class="restaurant-logo-overlap" href="/" aria-label="restaurant">
+              <img class="restaurant-logo-image" id="restaurantLogo" src="/demo/images/red-bun-logo.svg" alt="" />
+            </a>
+            <div class="restaurant-profile-copy">
+              <p class="eyebrow"><span class="open-dot" aria-hidden="true"></span><span data-copy="openNow">مفتوح الآن</span></p>
+              <h1 class="hero-title" id="restaurantName">…</h1>
+              <p class="hero-description" data-copy="restaurantDescription">
+                نكهات من البيت، تُحضّر على مهل وتُقدّم بكل حب.
+              </p>
+              <div class="restaurant-meta">
+                <span class="meta-item"><span class="meta-emoji" aria-hidden="true">⭐</span><strong>4.9</strong><span data-copy="ratingLabel">من 280 تقييم</span></span>
+                <span class="meta-item"><span class="meta-emoji" aria-hidden="true">⏱️</span><span data-copy="deliveryTime">20–30 دقيقة</span></span>
+                <span class="meta-item"><span class="meta-emoji" aria-hidden="true">📍</span><span data-copy="location">يافا، فلسطين</span></span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="menu-layout">
+          <section class="menu-main" aria-labelledby="browseTitle">
+            <div class="browse-head">
+              <div class="browse-copy">
+                <p class="section-kicker" data-copy="menuKicker">من مطبخنا إلى مائدتك</p>
+                <h2 class="browse-title" id="browseTitle" data-copy="menuTitle">قائمة اليوم</h2>
+                <p class="browse-description" data-copy="menuDescription">أطباق طازجة، مكوّنات موسمية، ونكهات تُشبه البيت.</p>
+              </div>
+              <label class="search-box">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.7" /><path d="m13 13 4 4" /></svg>
+                <input id="menuSearch" type="search" autocomplete="off" />
+                <span class="sr-only" data-copy="searchLabel">ابحث في القائمة</span>
+              </label>
+            </div>
+            <span class="category-dock-sentinel" id="categoryDockSentinel" aria-hidden="true"></span>
+            <nav class="category-strip" id="categoryStrip" aria-label="Menu categories"></nav>
+            <div class="dish-grid" id="dishGrid" aria-live="polite" aria-busy="false"></div>
+          </section>
+
+          <aside class="cart-panel desktop-cart" id="desktopCart" aria-label="Your order"></aside>
+        </div>
+      </main>
+
+      <footer class="footer-note" id="menuFooter">
+        <img class="footer-logo" src="/demo/images/ordora-mark.png" alt="Ordora" />
+        <span class="footer-copyright" data-copy="footerCopyright">© 2026 Ordora. جميع الحقوق محفوظة.</span>
+        <span class="footer-made" data-copy="footerMade">صُنع مع Ordora</span>
+      </footer>
     </div>
-    <div class="sk-cards"><div class="sk-mini shimmer"></div><div class="sk-mini shimmer"></div><div class="sk-mini shimmer"></div><div class="sk-mini shimmer"></div><div class="sk-mini shimmer"></div></div>
-  </div>
-  <div id="sk-offline" class="sk-offline" role="status" aria-live="polite">You appear offline — check your connection <button id="sk-offline-retry" type="button">Retry</button></div>
-  <div id="sk-retry" class="sk-retry" role="alert"><p style="margin:0 0 8px; font-weight:700">Connection is slow or offline</p><p class="muted small" style="margin:0 0 12px">The page is taking longer than usual. Check your internet or try again.</p><button id="sk-retry-btn" class="btn btn-sm" type="button">Retry</button></div>
 
-  <div class="live-page">
-    <header class="live-head" id="live-head"></header>
-    <main class="live-content" id="live-content" dir="rtl"></main>
-  </div>
-  <button class="live-cart hidden" id="live-cart-btn" type="button" aria-live="polite" aria-atomic="true"></button>
-  <div id="cart-root"></div>
-
-  <script src="/js/api.js"></script>
-  <script src="/js/restaurant.js"></script>
-  <script src="/js/pwa.js"></script>
-  <script src="/js/skeleton.js"></script>
-</body>
+    <button class="mobile-cart-bar" id="mobileCartBar" type="button" aria-expanded="false" aria-controls="cartDrawerRoot" hidden>
+      <span class="mobile-cart-summary"><span class="mobile-cart-count">0</span><span data-copy="viewOrder">عرض الطلب</span></span>
+      <strong class="mobile-cart-total">₪0</strong>
+    </button>
+    <div id="modalRoot"></div>
+    <div id="cartDrawerRoot"></div>
+    <div class="toast-zone" id="toastZone" aria-live="polite" aria-atomic="true"></div>
+    <script src="/js/api.js"></script>
+    <script src="/js/restaurant.js"></script>
+  </body>
 </html>

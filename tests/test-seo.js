@@ -16,19 +16,20 @@ test('TYPE_SCHEMA_MAP maps restaurant types correctly', () => {
   assert.strictEqual(TYPE_SCHEMA_MAP.cloud_kitchen, 'Restaurant');
 });
 
-test('homepage has canonical, OG, Twitter and JSON-LD', () => {
+test('homepage has OG, Twitter and description meta', () => {
   const fs = require('fs');
   const html = fs.readFileSync(require('path').join(__dirname, '..', 'client', 'index.html'), 'utf8');
   assert.ok(html.includes('og:title'));
   assert.ok(html.includes('twitter:card'));
-  assert.ok(html.includes('application/ld+json'));
-  assert.ok(html.includes('SoftwareApplication'));
+  assert.ok(html.includes('meta name="description"'));
+  assert.ok(html.includes('meta name="robots"'));
 });
 
-test('restaurant page injects SEO from API and sets storefront dir', () => {
+test('restaurant page sets title from API and sets storefront dir', () => {
   const fs = require('fs');
   const js = fs.readFileSync(require('path').join(__dirname, '..', 'client', 'js', 'restaurant.js'), 'utf8');
-  assert.ok(js.includes('/api/seo/business/'));
+  assert.ok(js.includes('/api/restaurants/'));
+  assert.ok(js.includes('document.title'));
   assert.ok(js.includes('document.documentElement.dir'));
 });
 

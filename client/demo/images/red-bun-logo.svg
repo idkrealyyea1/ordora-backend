@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-labelledby="title">
+  <title id="title">The Red Bun burger logo</title>
+  <rect width="240" height="240" rx="36" fill="#771923"/>
+  <rect x="11" y="11" width="218" height="218" rx="29" fill="none" stroke="#e7b66b" stroke-width="3"/>
+  <path d="M55 106c0-34 29-57 65-57s65 23 65 57H55Z" fill="#fff0d4"/>
+  <g fill="#9b2730">
+    <ellipse cx="91" cy="76" rx="3" ry="5" transform="rotate(35 91 76)"/>
+    <ellipse cx="116" cy="66" rx="3" ry="5" transform="rotate(35 116 66)"/>
+    <ellipse cx="143" cy="72" rx="3" ry="5" transform="rotate(35 143 72)"/>
+    <ellipse cx="161" cy="87" rx="3" ry="5" transform="rotate(35 161 87)"/>
+    <ellipse cx="76" cy="91" rx="3" ry="5" transform="rotate(35 76 91)"/>
+  </g>
+  <path d="M50 111h140l-11 17H61l-11-17Z" fill="#e4b65d"/>
+  <path d="M58 130c17 0 17-8 34-8s17 8 34 8 17-8 34-8 17 8 34 8l-8 13H66l-8-13Z" fill="#71834c"/>
+  <path d="M62 145h116c-3 16-15 24-29 24H91c-14 0-26-8-29-24Z" fill="#33201b"/>
+  <path d="M69 172h102c-7 15-23 22-51 22s-44-7-51-22Z" fill="#fff0d4"/>
+  <text x="120" y="218" fill="#fff0d4" font-family="Arial, sans-serif" font-size="14" font-weight="800" letter-spacing="3" text-anchor="middle">THE RED BUN</text>
+</svg>

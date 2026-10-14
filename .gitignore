@@ -25,3 +25,6 @@ Thumbs.db
 
 # Exported AI chat transcripts
 session-*.md
+
+# Design source material (unpacked into client/)
+Ordora-vanilla-frontend.zip

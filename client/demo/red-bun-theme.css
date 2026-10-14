@@ -1,0 +1,111 @@
+:root {
+  --cream: #fffaf4;
+  --paper: #ffffff;
+  --sand: #f6eee7;
+  --ink: #35171a;
+  --teal: #9b2632;
+  --teal-deep: #701923;
+  --coral: #b52b36;
+  --sun: #e4b65d;
+  --muted: #786b69;
+  --line: #eee1dc;
+}
+
+body,
+html,
+.menu-app {
+  background: #fffaf6;
+}
+
+.topbar {
+  background: #721721;
+  color: #fff8ef;
+  border-bottom-color: #721721;
+}
+
+.topbar-info,
+.text-button,
+.language-button {
+  color: #fff8ef;
+}
+
+.topbar-divider {
+  background: rgba(255, 248, 239, 0.34);
+}
+
+.text-button:hover,
+.language-button:hover {
+  color: #f0c576;
+}
+
+.preview-dot,
+.open-dot {
+  background: #e4b65d;
+  box-shadow: 0 0 0 4px rgba(228, 182, 93, 0.18);
+}
+
+.brandbar .brand-mark,
+.hero-title,
+.dish-section-heading h3,
+.dish-name {
+  color: #651923;
+}
+
+.restaurant-logo-overlap {
+  border-color: #fffaf4;
+  background: #771923;
+  box-shadow: 0 5px 16px rgba(83, 17, 26, 0.22);
+}
+
+.category-pill.active .category-emoji {
+  background: #f7e7e5;
+  box-shadow: inset 0 0 0 2px rgba(155, 38, 50, 0.22);
+}
+
+.category-pill.active,
+.category-pill:hover {
+  color: #771923;
+}
+
+.dish-card:focus-within {
+  border-color: rgba(155, 38, 50, 0.42);
+}
+
+.section-count,
+.category-emoji {
+  background: #f8efeb;
+}
+
+.add-quick {
+  background: #9b2632;
+  box-shadow: 0 2px 8px rgba(83, 17, 26, 0.2);
+}
+
+.add-quick:hover {
+  background: #701923;
+}
+
+.dish-tag {
+  color: #651923;
+}
+
+.header-cart,
+.mobile-cart-bar {
+  background: #8c202d;
+  color: #fffaf4;
+}
+
+.header-cart:hover,
+.mobile-cart-bar:hover {
+  background: #701923;
+}
+
+.footer-note {
+  border-top-color: #eee1dc;
+}
+
+@media (max-width: 720px) {
+  .topbar {
+    background: #721721;
+  }
+}
